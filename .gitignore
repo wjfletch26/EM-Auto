@@ -1,0 +1,50 @@
+# ============================================================
+# .gitignore — Deaton Outreach Automation
+# ============================================================
+
+# --- Dependencies ---
+node_modules/
+
+# --- Environment / Secrets ---
+# NEVER commit real credentials
+.env
+.env.local
+.env.*.local
+
+# --- Build output ---
+dist/
+build/
+out/
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE / Editor ---
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Cursor AI ---
+.cursor/
+agent-transcripts/
+mcps/
+terminals/
+
+# --- Misc ---
+*.tmp
+*.bak
+coverage/

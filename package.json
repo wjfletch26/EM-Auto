@@ -1,0 +1,23 @@
+{
+  "name": "deaton-outreach",
+  "version": "0.1.0",
+  "description": "Automated email outreach system for Deaton Engineering",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:smtp": "tsx scripts/test-smtp.ts",
+    "test:imap": "tsx scripts/test-imap.ts",
+    "test:ews": "tsx scripts/test-ews.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "imapflow": "^1.2.13",
+    "nodemailer": "^8.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/nodemailer": "^7.0.11",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
