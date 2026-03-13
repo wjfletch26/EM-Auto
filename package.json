@@ -1,22 +1,43 @@
 {
   "name": "deaton-outreach",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Automated email outreach system for Deaton Engineering",
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint src/ --ext .ts",
+    "test": "tsx --test src/**/*.test.ts",
     "test:smtp": "tsx scripts/test-smtp.ts",
     "test:imap": "tsx scripts/test-imap.ts",
-    "test:ews": "tsx scripts/test-ews.ts"
+    "test:ews": "tsx scripts/test-ews.ts",
+    "test:integration": "tsx scripts/test-integration.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
+    "express": "^5.1.0",
+    "googleapis": "^148.0.0",
+    "handlebars": "^4.7.8",
     "imapflow": "^1.2.13",
-    "nodemailer": "^8.0.2"
+    "mailparser": "^3.7.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^8.0.2",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.2",
+    "@types/mailparser": "^3.4.5",
     "@types/node": "^25.5.0",
     "@types/nodemailer": "^7.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "eslint": "^9.27.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

@@ -23,19 +23,19 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 
 ### Phase 1: Foundation
 
-- [ ] 1.1 Initialize project scaffold (`package.json`, `tsconfig.json`, `.eslintrc.json`, `.gitignore`, `.env.example`)
-- [ ] 1.2 Install all dependencies
-- [ ] 1.3 Build `src/config/schema.ts` — Zod schema for all env vars
-- [ ] 1.4 Build `src/config/index.ts` — Load `.env`, validate with Zod, export typed config
-- [ ] 1.5 Build `src/logging/logger.ts` — Pino logger with file rotation
-- [ ] 1.6 Build `src/services/sheets.ts` — Google Sheets read/write (per SOURCE_SYNC.md)
-- [ ] 1.7 Build `src/state/local-store.ts` — JSON file read/write with atomic writes
-- [ ] 1.8 Integration test: config + logger + Sheets all work together
-- [ ] **Exit**: `npm run build` succeeds with no TypeScript errors
-- [ ] **Exit**: Config validation rejects missing required vars
-- [ ] **Exit**: Logger writes structured JSON to `data/logs/`
-- [ ] **Exit**: Sheets service reads from and writes to the Google Spreadsheet
-- [ ] **Exit**: Local state store reads and writes JSON files atomically
+- [x] 1.1 Initialize project scaffold (`package.json`, `tsconfig.json`, `.eslintrc.json`, `.gitignore`, `.env.example`)
+- [x] 1.2 Install all dependencies
+- [x] 1.3 Build `src/config/schema.ts` — Zod schema for all env vars
+- [x] 1.4 Build `src/config/index.ts` — Load `.env`, validate with Zod, export typed config
+- [x] 1.5 Build `src/logging/logger.ts` — Pino logger with file rotation
+- [x] 1.6 Build `src/services/sheets.ts` — Google Sheets read/write (per SOURCE_SYNC.md)
+- [x] 1.7 Build `src/state/local-store.ts` — JSON file read/write with atomic writes
+- [x] 1.8 Integration test: config + logger + Sheets all work together
+- [x] **Exit**: `npm run build` succeeds with no TypeScript errors
+- [x] **Exit**: Config validation rejects missing required vars
+- [x] **Exit**: Logger writes structured JSON to `data/logs/`
+- [x] **Exit**: Sheets service reads from and writes to the Google Spreadsheet
+- [x] **Exit**: Local state store reads and writes JSON files atomically
 
 ### Phase 2: Send Pipeline
 
