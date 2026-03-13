@@ -6,6 +6,103 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 
 ---
 
+## Progress Tracker
+
+> **Tier Decision**: Tier 3 — Manual Reply Processing (see `cursor/PHASE0_RESULTS.md`)
+> **Last Updated**: 2026-03-12
+
+### Phase 0: Validate Credentials — COMPLETE
+
+- [x] 0.1 Write `scripts/test-smtp.ts` — test SMTP connection and send a test email
+- [x] 0.2 Write `scripts/test-imap.ts` — test IMAP connection and list recent messages
+- [x] 0.3 Write `scripts/test-ews.ts` — test EWS endpoint (fallback)
+- [x] 0.4 Document result: Tier 3 decided, `PHASE0_RESULTS.md` written
+- [x] **Exit**: SMTP sends email successfully
+- [x] **Exit**: IMAP/EWS result documented (both fail — basic auth blocked)
+- [x] **Exit**: Decision recorded — Tier 3
+
+### Phase 1: Foundation
+
+- [ ] 1.1 Initialize project scaffold (`package.json`, `tsconfig.json`, `.eslintrc.json`, `.gitignore`, `.env.example`)
+- [ ] 1.2 Install all dependencies
+- [ ] 1.3 Build `src/config/schema.ts` — Zod schema for all env vars
+- [ ] 1.4 Build `src/config/index.ts` — Load `.env`, validate with Zod, export typed config
+- [ ] 1.5 Build `src/logging/logger.ts` — Pino logger with file rotation
+- [ ] 1.6 Build `src/services/sheets.ts` — Google Sheets read/write (per SOURCE_SYNC.md)
+- [ ] 1.7 Build `src/state/local-store.ts` — JSON file read/write with atomic writes
+- [ ] 1.8 Integration test: config + logger + Sheets all work together
+- [ ] **Exit**: `npm run build` succeeds with no TypeScript errors
+- [ ] **Exit**: Config validation rejects missing required vars
+- [ ] **Exit**: Logger writes structured JSON to `data/logs/`
+- [ ] **Exit**: Sheets service reads from and writes to the Google Spreadsheet
+- [ ] **Exit**: Local state store reads and writes JSON files atomically
+
+### Phase 2: Send Pipeline
+
+- [ ] 2.1 Build `src/services/smtp.ts` — Nodemailer SMTP wrapper
+- [ ] 2.2 Build `src/utils/crypto.ts` — HMAC + base64url utilities
+- [ ] 2.3 Build `src/engine/unsubscribe.ts` — Token generation only
+- [ ] 2.4 Build `src/engine/sequence-engine.ts` — `evaluateContact()` function
+- [ ] 2.5 Write unit tests for sequence engine (9 test cases from spec)
+- [ ] 2.6 Build `src/engine/bounce-handler.ts` — `classifySmtpError()`, `recordBounce()`
+- [ ] 2.7 Build `src/engine/send-engine.ts` — `executeSendCycle()` function
+- [ ] 2.8 Create sample template `templates/test_step1.hbs`
+- [ ] 2.9 End-to-end test: send a real email through the full pipeline
+- [ ] **Exit**: SMTP service connects and sends emails
+- [ ] **Exit**: Sequence engine correctly identifies eligible contacts
+- [ ] **Exit**: Send engine orchestrates a full cycle (Sheets → eligibility → template → send → update)
+- [ ] **Exit**: Send Log tab gets new rows after a send cycle
+- [ ] **Exit**: Contacts tab gets updated (last_step_sent, last_send_date, status)
+- [ ] **Exit**: Bounce handler classifies SMTP errors and updates Sheets
+
+### Phase 3: Inbound Processing — TIER 3 PATH
+
+- [ ] 3.1T3 Set `IMAP_ENABLED=false` in `.env.example`
+- [ ] 3.2T3 Verify system works without IMAP (no errors)
+- [ ] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
+- [ ] **Exit**: System runs correctly without IMAP
+
+### Phase 4: Unsubscribe System
+
+- [ ] 4.1 Build `src/utils/rate-limiter.ts` — In-memory rate limiter middleware
+- [ ] 4.2 Build `src/web/routes/unsubscribe.ts` — GET handler + HTML pages
+- [ ] 4.3 Build `src/web/server.ts` — Express app with health + unsubscribe routes
+- [ ] 4.4 Test: generate token → hit endpoint → verify Sheets update
+- [ ] **Exit**: `GET /health` returns 200 with status JSON
+- [ ] **Exit**: `GET /unsubscribe?token=VALID` returns 200 + updates Sheets
+- [ ] **Exit**: `GET /unsubscribe?token=INVALID` returns 400
+- [ ] **Exit**: `GET /unsubscribe?token=EXPIRED` returns 400
+- [ ] **Exit**: Rate limiting blocks excessive requests
+
+### Phase 5: Scheduling and Integration
+
+- [ ] 5.1 Build `src/scheduler/cron.ts` — Cron jobs for send cycle, health heartbeat
+- [ ] 5.2 Build `src/main.ts` — Entry point with startup sequence + shutdown handling
+- [ ] 5.3 Create `ecosystem.config.js` for PM2
+- [ ] 5.4 End-to-end integration test (run 2+ cycles, verify all features)
+- [ ] **Exit**: `npm start` launches the application
+- [ ] **Exit**: Cron jobs fire on schedule
+- [ ] **Exit**: Send cycles execute correctly
+- [ ] **Exit**: Web server responds to health checks and unsubscribe
+- [ ] **Exit**: Graceful shutdown closes all connections cleanly
+- [ ] **Exit**: No overlapping cycles (mutex works)
+
+### Phase 6: Deployment
+
+- [ ] 6.1 Provision and harden VPS
+- [ ] 6.2 Configure DNS and Caddy for HTTPS
+- [ ] 6.3 Deploy application to VPS via PM2
+- [ ] 6.4 Production verification (email sent, unsubscribe works, Sheets updated)
+- [ ] 6.5 Set up UptimeRobot monitoring for `/health`
+- [ ] 6.6 24-hour soak test — review logs, verify no errors
+- [ ] **Exit**: App running on VPS via PM2
+- [ ] **Exit**: Unsubscribe endpoint reachable over HTTPS
+- [ ] **Exit**: Emails sent on schedule
+- [ ] **Exit**: Logs written and rotated
+- [ ] **Exit**: UptimeRobot reports health endpoint as up
+
+---
+
 ## Step 1: Read the Docs in This Order
 
 Before writing any code, read these documents to understand the system:
