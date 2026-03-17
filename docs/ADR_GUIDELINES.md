@@ -114,7 +114,7 @@ Maintain this list as new ADRs are created:
 **Status**: ACCEPTED
 **Date**: 2026-03-12
 
-**Context**: The system needs to read inbound replies to classify them. The sending mailbox is Microsoft 365 via GoDaddy. The operator has login credentials but no admin access. Microsoft has been deprecating IMAP basic auth. The forwarding-destination mailbox (`dknieriem@deatonengineering.com`) is for human review only — no credentials available.
+**Context**: The system needs to read inbound replies to classify them. The sending mailbox is Microsoft 365 via GoDaddy. The operator has login credentials but no admin access. Microsoft has been deprecating IMAP basic auth. The forwarding-destination mailbox (`REPLY_FORWARD_TO`) is for human review only — no credentials available.
 
 **Decision**: Implement a tiered fallback for reply processing:
 1. Tier 1: IMAP on the sending mailbox (test in Phase 0).

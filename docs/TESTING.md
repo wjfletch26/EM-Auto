@@ -145,6 +145,6 @@ npm run test:reply-forward-pause -- contact@example.com
 
 Expected result:
 
-- Forward email is sent to `dknieriem@deatonengineering.com`.
+- Forward email is sent to `REPLY_FORWARD_TO` from `.env`.
 - Contact row is updated to `status=paused`.
 - Contact `reply_status` is set to `forwarded`.

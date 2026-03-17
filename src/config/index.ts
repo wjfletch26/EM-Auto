@@ -29,6 +29,7 @@ function buildRawConfig() {
       pass: env.SMTP_PASS,
       secure: env.SMTP_SECURE,
       fromName: env.SMTP_FROM_NAME,
+      replyForwardTo: env.REPLY_FORWARD_TO,
     },
     imap: {
       enabled: env.IMAP_ENABLED,
@@ -103,6 +104,7 @@ export function getRedactedConfig(): Record<string, unknown> {
       pass: '***REDACTED***',
       secure: config.smtp.secure,
       fromName: config.smtp.fromName,
+      replyForwardTo: config.smtp.replyForwardTo,
     },
     imap: {
       enabled: config.imap.enabled,
