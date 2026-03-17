@@ -31,6 +31,15 @@ export interface SendResult {
   rejected: string[];
 }
 
+/** Input payload for forwarding a reply to human review. */
+export interface ForwardReplyInput {
+  contactEmail: string;
+  fromEmail: string;
+  subject: string;
+  body: string;
+  forwardTo?: string;
+}
+
 // ─── Transporter (lazy singleton) ────────────────────────────────────────────
 
 let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
@@ -98,6 +107,40 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
     accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [],
     rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
   };
+}
+
+/**
+ * Forwards an inbound reply to the human review mailbox.
+ * This is used by the reply bridge before we pause the contact.
+ */
+export async function forwardReplyForReview(input: ForwardReplyInput): Promise<SendResult> {
+  const forwardTo = input.forwardTo ?? 'dknieriem@deatonengineering.com';
+  const safeSubject = input.subject.trim() || '(no subject)';
+  const subject = `[Reply] ${input.contactEmail} | ${safeSubject}`;
+  const bodySnippet = input.body.trim().slice(0, 2000);
+  const text = [
+    'Inbound reply captured by Deaton Outreach.',
+    '',
+    `Contact: ${input.contactEmail}`,
+    `From: ${input.fromEmail}`,
+    `Original Subject: ${safeSubject}`,
+    '',
+    'Reply body snippet:',
+    bodySnippet,
+  ].join('\n');
+
+  logger.info(
+    { module: 'smtp', contactEmail: input.contactEmail, to: forwardTo },
+    'Forwarding inbound reply for manual review',
+  );
+
+  return sendEmail({
+    to: forwardTo,
+    from: { name: config.smtp.fromName, address: config.smtp.user },
+    subject,
+    text,
+    html: `<pre>${text}</pre>`,
+  });
 }
 
 /**

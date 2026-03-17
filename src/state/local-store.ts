@@ -128,6 +128,15 @@ export interface ProcessedMessagesState {
   processed_uids: number[];
 }
 
+/** Shape of one queued manual-forward reply event. */
+export interface ForwardedReplyEvent {
+  contactEmail: string;
+  fromEmail: string;
+  subject: string;
+  body: string;
+  receivedAt: string;
+}
+
 /** Read the last-run state, defaulting to null if no run has happened yet. */
 export function getLastRun(): LastRunState | null {
   return readState<LastRunState | null>('last-run.json', null);
@@ -151,4 +160,21 @@ export function savePendingSends(state: PendingSendsState): void {
 /** Clear pending sends after a cycle completes successfully. */
 export function clearPendingSends(): void {
   deleteState('pending-sends.json');
+}
+
+/** Read queued forwarded reply events (Tier 3 bridge). */
+export function getForwardedReplyQueue(): ForwardedReplyEvent[] {
+  return readState<ForwardedReplyEvent[]>('forwarded-replies.json', []);
+}
+
+/** Persist queued forwarded reply events. */
+export function saveForwardedReplyQueue(events: ForwardedReplyEvent[]): void {
+  writeState('forwarded-replies.json', events);
+}
+
+/** Append a single forwarded reply event to the queue. */
+export function enqueueForwardedReply(event: ForwardedReplyEvent): void {
+  const queue = getForwardedReplyQueue();
+  queue.push(event);
+  saveForwardedReplyQueue(queue);
 }

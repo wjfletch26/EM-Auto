@@ -115,3 +115,36 @@ Expected:
 - `npm run lint` may fail due to ESLint v9 config migration (`.eslintrc.json` vs `eslint.config.js`).
 - This lint issue is separate from unsubscribe/send runtime behavior.
 - For deployment testing later, switch `UNSUB_BASE_URL` back to public HTTPS URL after DNS and Caddy are configured.
+
+---
+
+## 7) Pause-On-Forward + Monthly Cadence Checks
+
+### Unit-level checks
+
+These run in `npm test` and now include:
+
+- Reply-forward processor: successful forward pauses the contact and failed forward retries.
+- Sequence engine: paused contacts are ineligible.
+- Sequence engine: follow-up sends require monthly cadence (minimum 30 days).
+- Sequence engine: campaign `total_steps` still controls sequence length (5 or 6).
+
+### Smoke test for reply-forward pause
+
+Queue one forwarded-reply event:
+
+```bash
+npm run queue:reply-forward -- contact@example.com "Re: Outreach" "Please follow up next month."
+```
+
+Run one processor pass and verify pause behavior:
+
+```bash
+npm run test:reply-forward-pause -- contact@example.com
+```
+
+Expected result:
+
+- Forward email is sent to `dknieriem@deatonengineering.com`.
+- Contact row is updated to `status=paused`.
+- Contact `reply_status` is set to `forwarded`.
