@@ -74,18 +74,18 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: `GET /unsubscribe?token=EXPIRED` returns 400
 - [x] **Exit**: Rate limiting blocks excessive requests
 
-### Phase 5: Scheduling and Integration — IN PROGRESS
+### Phase 5: Scheduling and Integration — COMPLETE
 
 - [x] 5.1 Build `src/scheduler/cron.ts` — Cron jobs for send cycle, health heartbeat
 - [x] 5.2 Build `src/main.ts` — Entry point with startup sequence + shutdown handling
 - [x] 5.3 Create `ecosystem.config.js` for PM2
-- [ ] 5.4 End-to-end integration test (run 2+ cycles, verify all features)
+- [x] 5.4 End-to-end integration test (run 2+ cycles, verify all features)
 - [x] **Exit**: `npm start` launches the application
-- [ ] **Exit**: Cron jobs fire on schedule
-- [ ] **Exit**: Send cycles execute correctly
-- [ ] **Exit**: Web server responds to health checks and unsubscribe
-- [ ] **Exit**: Graceful shutdown closes all connections cleanly
-- [ ] **Exit**: No overlapping cycles (mutex works)
+- [x] **Exit**: Cron jobs fire on schedule
+- [x] **Exit**: Send cycles execute correctly
+- [x] **Exit**: Web server responds to health checks and unsubscribe
+- [x] **Exit**: Graceful shutdown closes all connections cleanly
+- [x] **Exit**: No overlapping cycles (mutex works)
 
 ### Phase 6: Deployment
 
