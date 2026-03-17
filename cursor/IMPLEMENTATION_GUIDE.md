@@ -21,7 +21,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: IMAP/EWS result documented (both fail — basic auth blocked)
 - [x] **Exit**: Decision recorded — Tier 3
 
-### Phase 1: Foundation
+### Phase 1: Foundation — COMPLETE
 
 - [x] 1.1 Initialize project scaffold (`package.json`, `tsconfig.json`, `.eslintrc.json`, `.gitignore`, `.env.example`)
 - [x] 1.2 Install all dependencies
@@ -58,7 +58,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 ### Phase 3: Inbound Processing — TIER 3 PATH — COMPLETE
 
 - [x] 3.1T3 Set `IMAP_ENABLED=false` in `.env.example` (already set with Tier 3 comment)
-- [x] 3.2T3 Verify system works without IMAP (build clean, 9/9 tests pass, no imapflow imports)
+- [] 3.2T3 Verify system works without IMAP (build clean, 9/9 tests pass, no imapflow imports)
 - [x] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
 - [x] **Exit**: System runs correctly without IMAP
 
@@ -117,6 +117,7 @@ Before writing any code, read these documents to understand the system:
 ## Step 2: Follow the Build Plan
 
 Open **[cursor/BUILD_PLAN.md](./BUILD_PLAN.md)** and execute phases in order:
+
 - Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6
 
 For granular task lists within each phase, see **[cursor/TASKS.md](./TASKS.md)**.
@@ -126,6 +127,7 @@ For granular task lists within each phase, see **[cursor/TASKS.md](./TASKS.md)**
 ## Step 3: Use Specs as Blueprints
 
 When building each module, open the corresponding spec from `/specs/`. Each spec contains:
+
 - The **public interface** (function signatures, types).
 - The **algorithm** (step-by-step pseudocode).
 - The **error handling** rules.
@@ -133,19 +135,19 @@ When building each module, open the corresponding spec from `/specs/`. Each spec
 
 The specs are written so you can translate them almost directly into TypeScript.
 
-| Module | Spec File |
-|---|---|
-| `src/services/smtp.ts` | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) (SMTP section) |
-| `src/services/imap.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (IMAP section) |
-| `src/services/sheets.ts` | [specs/SOURCE_SYNC.md](../specs/SOURCE_SYNC.md) |
-| `src/engine/send-engine.ts` | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) |
-| `src/engine/sequence-engine.ts` | [specs/SEQUENCE_ENGINE.md](../specs/SEQUENCE_ENGINE.md) |
-| `src/engine/reply-processor.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) |
-| `src/engine/bounce-handler.ts` | [specs/BOUNCE_HANDLER.md](../specs/BOUNCE_HANDLER.md) |
-| `src/engine/unsubscribe.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) |
-| `src/classifiers/reply-rules.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (rules section) |
-| `src/web/routes/unsubscribe.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (web section) |
-| `src/utils/crypto.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (crypto section) |
+| Module                           | Spec File                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| `src/services/smtp.ts`           | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) (SMTP section)                 |
+| `src/services/imap.ts`           | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (IMAP section)         |
+| `src/services/sheets.ts`         | [specs/SOURCE_SYNC.md](../specs/SOURCE_SYNC.md)                                |
+| `src/engine/send-engine.ts`      | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md)                                |
+| `src/engine/sequence-engine.ts`  | [specs/SEQUENCE_ENGINE.md](../specs/SEQUENCE_ENGINE.md)                        |
+| `src/engine/reply-processor.ts`  | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md)                        |
+| `src/engine/bounce-handler.ts`   | [specs/BOUNCE_HANDLER.md](../specs/BOUNCE_HANDLER.md)                          |
+| `src/engine/unsubscribe.ts`      | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md)                  |
+| `src/classifiers/reply-rules.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (rules section)        |
+| `src/web/routes/unsubscribe.ts`  | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (web section)    |
+| `src/utils/crypto.ts`            | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (crypto section) |
 
 ---
 
@@ -180,12 +182,15 @@ In practice, for this MVP it's acceptable to import the service singletons, but 
 Every significant action gets a log entry. Use structured fields:
 
 ```typescript
-logger.info({
-  module: 'send-engine',
-  contactEmail: contact.email,
-  step: 2,
-  messageId: result.messageId,
-}, 'Email sent successfully');
+logger.info(
+  {
+    module: "send-engine",
+    contactEmail: contact.email,
+    step: 2,
+    messageId: result.messageId,
+  },
+  "Email sent successfully",
+);
 ```
 
 Always include `module` and the relevant context fields.
@@ -213,6 +218,7 @@ Never hardcode values that should be configurable. If it might change (delays, b
 ### Quick Smoke Tests
 
 **Send pipeline smoke test:**
+
 ```bash
 # Add a test contact to the Contacts tab in Google Sheets.
 # Run the send engine once:
@@ -224,6 +230,7 @@ npx ts-node -e "
 ```
 
 **Unsubscribe smoke test:**
+
 ```bash
 # Start the web server.
 # Generate a test token:

@@ -89,15 +89,18 @@ npm run lint
 ```
 src/
 ├── config/          # Environment config + Zod validation
-├── services/        # External I/O (SMTP, IMAP, Sheets)
-├── engine/          # Business logic (send, sequence, reply, bounce, unsub)
-├── classifiers/     # Reply classification rules
+├── services/        # External I/O (SMTP, Sheets)
+├── engine/          # Business logic (send, sequence, bounce, unsub)
 ├── web/             # Express.js unsubscribe endpoint
 ├── state/           # Local JSON state management
 ├── logging/         # Pino logger setup
 ├── scheduler/       # node-cron job definitions
 ├── utils/           # Shared utilities (crypto, rate limiter)
 └── main.ts          # Entry point
+
+Note: Reply processing is manual (Tier 3). IMAP/EWS basic auth was blocked
+by Microsoft — see cursor/PHASE0_RESULTS.md. Replies are handled by the
+human operator updating Google Sheets (see docs/OPERATIONS.md).
 ```
 
 ## License
