@@ -4,7 +4,7 @@
 
 Under normal operation, the system requires **no daily human intervention**. The cron scheduler handles everything automatically.
 
-The human operator at `dknieriem@deatonengineering.com` should:
+The human operator at the mailbox set by `REPLY_FORWARD_TO` should:
 1. Review forwarded replies in their inbox.
 2. Queue the forwarded reply event so the app can pause that contact automatically.
 3. If needed, update additional reply details in Google Sheets.
@@ -125,7 +125,7 @@ pm2 restart deaton-outreach
 
 ## Manual Reply Processing (Tier 3 Workflow)
 
-If IMAP/EWS is not available, the human at `dknieriem@deatonengineering.com` follows this process:
+If IMAP/EWS is not available, the human at `REPLY_FORWARD_TO` follows this process:
 
 ### Daily (or as replies come in):
 
@@ -137,6 +137,10 @@ If IMAP/EWS is not available, the human at `dknieriem@deatonengineering.com` fol
 3. Wait for the next reply cron tick (default every 5 minutes), or run a one-off smoke check:
    ```bash
    npm run test:reply-forward-pause -- contact@example.com
+   ```
+   If you already queued the event in step 2 and want to avoid enqueuing again:
+   ```bash
+   npm run test:reply-forward-pause -- contact@example.com --process-only
    ```
 4. Confirm the contact is auto-paused:
    - `status = paused`

@@ -29,6 +29,13 @@ const smtpSchema = z.object({
   pass: z.string().min(1, 'SMTP_PASS is required'),
   secure: envBoolean.default(false),
   fromName: z.string().optional().default(''),
+  // Default human-review mailbox for forwarded replies.
+  // Can be overridden per environment with REPLY_FORWARD_TO.
+  replyForwardTo: z
+    .string()
+    .email('REPLY_FORWARD_TO must be a valid email')
+    .optional()
+    .default('dknieriem@deatonengineering.com'),
 });
 
 // --- IMAP settings (conditional — disabled for Tier 3) ---

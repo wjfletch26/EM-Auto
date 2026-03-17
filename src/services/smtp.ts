@@ -7,10 +7,10 @@
  * Reference: specs/SEND_ENGINE.md (SMTP section)
  */
 
-import nodemailer from 'nodemailer';
-import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
-import { config } from '../config/index.js';
-import { logger } from '../logging/logger.js';
+import nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport/index.js";
+import { config } from "../config/index.js";
+import { logger } from "../logging/logger.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,7 +42,8 @@ export interface ForwardReplyInput {
 
 // ─── Transporter (lazy singleton) ────────────────────────────────────────────
 
-let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
+let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null =
+  null;
 
 /**
  * Returns the Nodemailer transporter, creating it on first call.
@@ -60,7 +61,7 @@ function getTransporter(): nodemailer.Transporter<SMTPTransport.SentMessageInfo>
       pass: config.smtp.pass,
     },
     tls: {
-      ciphers: 'SSLv3',
+      ciphers: "SSLv3",
       rejectUnauthorized: true,
     },
     // Connection timeout: 30s, greeting timeout: 30s, socket timeout: 60s
@@ -91,15 +92,15 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
   };
 
   logger.debug(
-    { module: 'smtp', to: message.to, subject: message.subject },
-    'Sending email',
+    { module: "smtp", to: message.to, subject: message.subject },
+    "Sending email",
   );
 
   const info = await t.sendMail(mailOptions);
 
   logger.info(
-    { module: 'smtp', to: message.to, messageId: info.messageId },
-    'Email sent successfully',
+    { module: "smtp", to: message.to, messageId: info.messageId },
+    "Email sent successfully",
   );
 
   return {
@@ -113,25 +114,28 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
  * Forwards an inbound reply to the human review mailbox.
  * This is used by the reply bridge before we pause the contact.
  */
-export async function forwardReplyForReview(input: ForwardReplyInput): Promise<SendResult> {
-  const forwardTo = input.forwardTo ?? 'dknieriem@deatonengineering.com';
-  const safeSubject = input.subject.trim() || '(no subject)';
+export async function forwardReplyForReview(
+  input: ForwardReplyInput,
+): Promise<SendResult> {
+  // Use explicit override if provided, otherwise use environment config.
+  const forwardTo = input.forwardTo ?? config.smtp.replyForwardTo;
+  const safeSubject = input.subject.trim() || "(no subject)";
   const subject = `[Reply] ${input.contactEmail} | ${safeSubject}`;
   const bodySnippet = input.body.trim().slice(0, 2000);
   const text = [
-    'Inbound reply captured by Deaton Outreach.',
-    '',
+    "Inbound reply captured by Deaton Outreach.",
+    "",
     `Contact: ${input.contactEmail}`,
     `From: ${input.fromEmail}`,
     `Original Subject: ${safeSubject}`,
-    '',
-    'Reply body snippet:',
+    "",
+    "Reply body snippet:",
     bodySnippet,
-  ].join('\n');
+  ].join("\n");
 
   logger.info(
-    { module: 'smtp', contactEmail: input.contactEmail, to: forwardTo },
-    'Forwarding inbound reply for manual review',
+    { module: "smtp", contactEmail: input.contactEmail, to: forwardTo },
+    "Forwarding inbound reply for manual review",
   );
 
   return sendEmail({
@@ -151,11 +155,14 @@ export async function verifyConnection(): Promise<boolean> {
   try {
     const t = getTransporter();
     await t.verify();
-    logger.info({ module: 'smtp' }, 'SMTP connection verified');
+    logger.info({ module: "smtp" }, "SMTP connection verified");
     return true;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error({ module: 'smtp', error: message }, 'SMTP connection verification failed');
+    logger.error(
+      { module: "smtp", error: message },
+      "SMTP connection verification failed",
+    );
     return false;
   }
 }
@@ -168,7 +175,7 @@ export async function disconnect(): Promise<void> {
   if (transporter) {
     transporter.close();
     transporter = null;
-    logger.info({ module: 'smtp' }, 'SMTP connection closed');
+    logger.info({ module: "smtp" }, "SMTP connection closed");
   }
 }
 
@@ -177,7 +184,9 @@ export async function disconnect(): Promise<void> {
  * Nodemailer attaches `responseCode` on SMTP rejections.
  * Falls back to parsing the first 3-digit code from the error message.
  */
-export function extractSmtpCode(error: Error & { responseCode?: number }): number | null {
+export function extractSmtpCode(
+  error: Error & { responseCode?: number },
+): number | null {
   if (error.responseCode) return error.responseCode;
 
   // Fallback: look for a 3-digit code at the start of the message
