@@ -58,7 +58,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 ### Phase 3: Inbound Processing — TIER 3 PATH — COMPLETE
 
 - [x] 3.1T3 Set `IMAP_ENABLED=false` in `.env.example` (already set with Tier 3 comment)
-- [] 3.2T3 Verify system works without IMAP (build clean, 9/9 tests pass, no imapflow imports)
+- [x] 3.2T3 Verify system works without IMAP (build clean, 9/9 tests pass, no imapflow imports)
 - [x] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
 - [x] **Exit**: System runs correctly without IMAP
 
