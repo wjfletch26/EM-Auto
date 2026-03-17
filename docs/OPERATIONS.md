@@ -8,6 +8,8 @@ The human operator at `dknieriem@deatonengineering.com` should:
 1. Review forwarded replies in their inbox.
 2. If running in Tier 3 (manual reply processing): update the Google Sheet with reply statuses.
 
+For test command workflows (local and quick regression checks), see `docs/TESTING.md`.
+
 ---
 
 ## Checking System Health
