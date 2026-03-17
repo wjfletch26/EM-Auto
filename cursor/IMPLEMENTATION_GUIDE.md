@@ -9,7 +9,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 ## Progress Tracker
 
 > **Tier Decision**: Tier 3 — Manual Reply Processing (see `cursor/PHASE0_RESULTS.md`)
-> **Last Updated**: 2026-03-13
+> **Last Updated**: 2026-03-16
 
 ### Phase 0: Validate Credentials — COMPLETE
 
@@ -62,17 +62,17 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
 - [x] **Exit**: System runs correctly without IMAP
 
-### Phase 4: Unsubscribe System
+### Phase 4: Unsubscribe System — COMPLETE
 
-- [ ] 4.1 Build `src/utils/rate-limiter.ts` — In-memory rate limiter middleware
-- [ ] 4.2 Build `src/web/routes/unsubscribe.ts` — GET handler + HTML pages
-- [ ] 4.3 Build `src/web/server.ts` — Express app with health + unsubscribe routes
-- [ ] 4.4 Test: generate token → hit endpoint → verify Sheets update
-- [ ] **Exit**: `GET /health` returns 200 with status JSON
-- [ ] **Exit**: `GET /unsubscribe?token=VALID` returns 200 + updates Sheets
-- [ ] **Exit**: `GET /unsubscribe?token=INVALID` returns 400
-- [ ] **Exit**: `GET /unsubscribe?token=EXPIRED` returns 400
-- [ ] **Exit**: Rate limiting blocks excessive requests
+- [x] 4.1 Build `src/utils/rate-limiter.ts` — In-memory rate limiter middleware
+- [x] 4.2 Build `src/web/routes/unsubscribe.ts` — GET handler + HTML pages
+- [x] 4.3 Build `src/web/server.ts` — Express app with health + unsubscribe routes
+- [x] 4.4 Test: generate token → hit endpoint → verify Sheets update
+- [x] **Exit**: `GET /health` returns 200 with status JSON
+- [x] **Exit**: `GET /unsubscribe?token=VALID` returns 200 + updates Sheets
+- [x] **Exit**: `GET /unsubscribe?token=INVALID` returns 400
+- [x] **Exit**: `GET /unsubscribe?token=EXPIRED` returns 400
+- [x] **Exit**: Rate limiting blocks excessive requests
 
 ### Phase 5: Scheduling and Integration
 
@@ -220,27 +220,18 @@ Never hardcode values that should be configurable. If it might change (delays, b
 **Send pipeline smoke test:**
 
 ```bash
-# Add a test contact to the Contacts tab in Google Sheets.
-# Run the send engine once:
-npx ts-node -e "
-  import { executeSendCycle } from './src/engine/send-engine';
-  executeSendCycle().then(r => console.log(r));
-"
-# Verify: email received, Send Log updated, Contact status updated.
+# Run one full send cycle:
+npx tsx scripts/test-send-cycle.ts
 ```
 
 **Unsubscribe smoke test:**
 
 ```bash
-# Start the web server.
-# Generate a test token:
-npx ts-node -e "
-  import { generateUnsubscribeUrl } from './src/engine/unsubscribe';
-  console.log(generateUnsubscribeUrl('test@example.com'));
-"
-# Open the URL in a browser. Verify the confirmation page appears.
-# Check Sheets: test@example.com should be marked as unsubscribed.
+# Run endpoint smoke checks (/health, invalid, expired, valid token):
+npm run test:unsub-web
 ```
+
+For full command recipes and local/manual test flows, see `docs/TESTING.md`.
 
 ---
 

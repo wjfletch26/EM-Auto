@@ -14,7 +14,8 @@
     "test:smtp": "tsx scripts/test-smtp.ts",
     "test:imap": "tsx scripts/test-imap.ts",
     "test:ews": "tsx scripts/test-ews.ts",
-    "test:integration": "tsx scripts/test-integration.ts"
+    "test:integration": "tsx scripts/test-integration.ts",
+    "test:unsub-web": "tsx scripts/test-unsubscribe-web.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
