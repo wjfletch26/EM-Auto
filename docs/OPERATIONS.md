@@ -6,7 +6,8 @@ Under normal operation, the system requires **no daily human intervention**. The
 
 The human operator at `dknieriem@deatonengineering.com` should:
 1. Review forwarded replies in their inbox.
-2. If running in Tier 3 (manual reply processing): update the Google Sheet with reply statuses.
+2. Queue the forwarded reply event so the app can pause that contact automatically.
+3. If needed, update additional reply details in Google Sheets.
 
 For test command workflows (local and quick regression checks), see `docs/TESTING.md`.
 
@@ -129,24 +130,35 @@ If IMAP/EWS is not available, the human at `dknieriem@deatonengineering.com` fol
 ### Daily (or as replies come in):
 
 1. Open the forwarded reply in your email.
-2. Determine the classification:
+2. Queue the reply event for processing:
+   ```bash
+   npm run queue:reply-forward -- contact@example.com "Re: Subject" "Body snippet"
+   ```
+3. Wait for the next reply cron tick (default every 5 minutes), or run a one-off smoke check:
+   ```bash
+   npm run test:reply-forward-pause -- contact@example.com
+   ```
+4. Confirm the contact is auto-paused:
+   - `status = paused`
+   - `reply_status = forwarded`
+5. Determine the classification:
    - **QUALIFIED**: The contact expressed interest or wants to talk.
    - **NOT_INTERESTED**: The contact declined.
    - **UNSUBSCRIBE**: The contact asked to be removed.
    - **OUT_OF_OFFICE**: Auto-reply / vacation message.
    - **BOUNCE**: Delivery failure notification.
    - **UNCLEAR**: Can't determine intent.
-3. Open the Google Sheet "Contacts" tab.
-4. Find the contact's row (search by email).
-5. Update the following columns:
+6. Open the Google Sheet "Contacts" tab.
+7. Find the contact's row (search by email).
+8. Update the following columns:
    - `reply_status`: Set to the classification.
    - `reply_date`: Set to the date of the reply.
    - `reply_snippet`: (Optional) Paste a brief excerpt.
-6. If the classification is **UNSUBSCRIBE**:
+9. If the classification is **UNSUBSCRIBE**:
    - Also set `unsubscribed` to `TRUE`.
    - Also set `unsubscribe_date`.
    - Also set `unsubscribe_source` to `manual`.
-7. If the classification is **BOUNCE**:
+10. If the classification is **BOUNCE**:
    - Also set `bounced` to `TRUE`.
    - Also set `bounce_type` to `hard`.
    - Also set `bounce_date`.

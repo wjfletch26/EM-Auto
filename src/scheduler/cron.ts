@@ -10,6 +10,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import { executeSendCycle } from '../engine/send-engine.js';
+import { processForwardedReplyQueue } from '../engine/reply-forward-processor.js';
 
 /**
  * Returned handle so the main entrypoint can stop all jobs on shutdown.
@@ -31,17 +32,21 @@ async function runSendCycleSafe(): Promise<void> {
 }
 
 async function runReplyCycleSafe(): Promise<void> {
-  // Tier 3 (manual replies): do nothing except a low-noise debug trace.
-  if (!config.imap.enabled) {
-    logger.debug({ module: 'scheduler' }, 'Reply cycle skipped: IMAP is disabled');
-    return;
-  }
+  try {
+    const result = await processForwardedReplyQueue();
+    if (result.processed === 0 && result.failed === 0) {
+      logger.debug({ module: 'scheduler' }, 'Reply cycle complete: no queued reply events');
+      return;
+    }
 
-  // Tier 1/2 hook point for future phases.
-  logger.warn(
-    { module: 'scheduler' },
-    'Reply cycle ticked, but automated reply processing is not implemented yet',
-  );
+    logger.info(
+      { module: 'scheduler', ...result },
+      'Reply cycle complete',
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ module: 'scheduler', error: message }, 'Scheduled reply cycle failed');
+  }
 }
 
 function writeHeartbeat(): void {

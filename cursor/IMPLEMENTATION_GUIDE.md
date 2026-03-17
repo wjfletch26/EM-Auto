@@ -87,6 +87,18 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: Graceful shutdown closes all connections cleanly
 - [x] **Exit**: No overlapping cycles (mutex works)
 
+### Phase 5.5: Pause-On-Forward + Monthly Cadence — COMPLETE
+
+- [x] 5.5.1 Add reply-forward bridge to process queued forwarded replies
+- [x] 5.5.2 Forward reply details to `dknieriem@deatonengineering.com`
+- [x] 5.5.3 Pause matching contact after successful forward (`status=paused`)
+- [x] 5.5.4 Enforce monthly cadence between sends for follow-up steps (minimum 30 days)
+- [x] 5.5.5 Respect campaign-defined sequence length (`campaign.totalSteps`, e.g. 5 or 6)
+- [x] 5.5.6 Add tests for pause-on-forward and monthly cadence
+- [x] **Exit**: Reply-cycle can process queued reply-forward events safely
+- [x] **Exit**: Forwarded-reply contacts are paused automatically
+- [x] **Exit**: Follow-up messages are constrained to monthly cadence
+
 ### Phase 6: Deployment
 
 - [ ] 6.1 Provision and harden VPS

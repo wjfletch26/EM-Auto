@@ -2,7 +2,7 @@
  * Unit tests for the Sequence Engine.
  *
  * The sequence engine is pure logic — no I/O, no mocks needed.
- * These 9 test cases cover every eligibility path from the spec.
+ * Tests cover halt conditions, cadence, and sequence boundaries.
  *
  * Run with: npx tsx --test src/engine/sequence-engine.test.ts
  */
@@ -95,8 +95,8 @@ describe('Sequence Engine — evaluateContact()', () => {
     assert.match(result.reason, /delay not elapsed/i);
   });
 
-  // Test 3: Contact sent step 1 four days ago, step 2 delay 3 days → eligible
-  it('should approve when delay has elapsed', () => {
+  // Test 3: Monthly cadence: 4 days is still too early for follow-up
+  it('should reject follow-up sends before monthly cadence elapses', () => {
     const contact = makeContact({
       lastStepSent: 1,
       lastSendDate: daysAgo(4).toISOString(),
@@ -105,8 +105,8 @@ describe('Sequence Engine — evaluateContact()', () => {
     const campaign = makeCampaign();
     const result = evaluateContact(contact, campaign, now);
 
-    assert.equal(result.eligible, true);
-    assert.equal(result.nextStep?.stepNumber, 2);
+    assert.equal(result.eligible, false);
+    assert.match(result.reason, /delay not elapsed/i);
   });
 
   // Test 4: Contact unsubscribed → not eligible
@@ -170,5 +170,76 @@ describe('Sequence Engine — evaluateContact()', () => {
 
     assert.equal(result.eligible, false);
     assert.match(result.reason, /not found/i);
+  });
+
+  // Test 10: Paused contact → not eligible
+  it('should reject paused contacts', () => {
+    const contact = makeContact({ status: 'paused' });
+    const campaign = makeCampaign();
+    const result = evaluateContact(contact, campaign, now);
+
+    assert.equal(result.eligible, false);
+    assert.match(result.reason, /paused/i);
+  });
+
+  // Test 11: Monthly cadence met (31 days) → eligible for follow-up
+  it('should approve follow-up sends after monthly cadence elapses', () => {
+    const contact = makeContact({
+      lastStepSent: 1,
+      lastSendDate: daysAgo(31).toISOString(),
+      status: 'active',
+    });
+    const campaign = makeCampaign();
+    const result = evaluateContact(contact, campaign, now);
+
+    assert.equal(result.eligible, true);
+    assert.equal(result.nextStep?.stepNumber, 2);
+  });
+
+  // Test 12: Campaign-defined total steps respected for 5-step campaigns
+  it('should stop at totalSteps for a 5-step campaign', () => {
+    const contact = makeContact({
+      lastStepSent: 5,
+      lastSendDate: daysAgo(31).toISOString(),
+      status: 'active',
+    });
+    const campaign = makeCampaign({
+      totalSteps: 5,
+      steps: [
+        { stepNumber: 1, templateFile: 's1.hbs', subject: 's1', delayDays: 0 },
+        { stepNumber: 2, templateFile: 's2.hbs', subject: 's2', delayDays: 30 },
+        { stepNumber: 3, templateFile: 's3.hbs', subject: 's3', delayDays: 30 },
+        { stepNumber: 4, templateFile: 's4.hbs', subject: 's4', delayDays: 30 },
+        { stepNumber: 5, templateFile: 's5.hbs', subject: 's5', delayDays: 30 },
+      ],
+    });
+    const result = evaluateContact(contact, campaign, now);
+
+    assert.equal(result.eligible, false);
+    assert.match(result.reason, /sequence complete/i);
+  });
+
+  // Test 13: Campaign-defined total steps respected for 6-step campaigns
+  it('should allow step 6 when campaign totalSteps is 6', () => {
+    const contact = makeContact({
+      lastStepSent: 5,
+      lastSendDate: daysAgo(31).toISOString(),
+      status: 'active',
+    });
+    const campaign = makeCampaign({
+      totalSteps: 6,
+      steps: [
+        { stepNumber: 1, templateFile: 's1.hbs', subject: 's1', delayDays: 0 },
+        { stepNumber: 2, templateFile: 's2.hbs', subject: 's2', delayDays: 30 },
+        { stepNumber: 3, templateFile: 's3.hbs', subject: 's3', delayDays: 30 },
+        { stepNumber: 4, templateFile: 's4.hbs', subject: 's4', delayDays: 30 },
+        { stepNumber: 5, templateFile: 's5.hbs', subject: 's5', delayDays: 30 },
+        { stepNumber: 6, templateFile: 's6.hbs', subject: 's6', delayDays: 30 },
+      ],
+    });
+    const result = evaluateContact(contact, campaign, now);
+
+    assert.equal(result.eligible, true);
+    assert.equal(result.nextStep?.stepNumber, 6);
   });
 });

@@ -10,6 +10,9 @@
 import { logger } from '../logging/logger.js';
 import type { Contact, Campaign, CampaignStep } from '../services/sheets-types.js';
 
+// Monthly cadence requirement: after step 1, wait at least 30 days.
+const MIN_MONTHLY_DELAY_DAYS = 30;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /** The result of evaluating a single contact for eligibility. */
@@ -49,6 +52,10 @@ export function evaluateContact(
 
   if (contact.status === 'do_not_contact') {
     return { eligible: false, reason: 'Contact is marked do_not_contact' };
+  }
+
+  if (contact.status === 'paused') {
+    return { eligible: false, reason: 'Contact is paused' };
   }
 
   // Any reply halts the sequence — the human operator decides next steps
@@ -112,6 +119,11 @@ export function evaluateContact(
   // Need a lastSendDate to calculate timing for step 2+
   if (contact.lastSendDate === null) {
     return { eligible: false, reason: 'No last send date recorded — cannot calculate delay' };
+  }
+
+  // Enforce a minimum monthly cadence for follow-up steps.
+  if (nextStepNumber > 1 && delayDays < MIN_MONTHLY_DELAY_DAYS) {
+    delayDays = MIN_MONTHLY_DELAY_DAYS;
   }
 
   // Calculate when this contact becomes eligible
