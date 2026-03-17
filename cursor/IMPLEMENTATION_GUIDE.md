@@ -9,7 +9,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 ## Progress Tracker
 
 > **Tier Decision**: Tier 3 — Manual Reply Processing (see `cursor/PHASE0_RESULTS.md`)
-> **Last Updated**: 2026-03-12
+> **Last Updated**: 2026-03-13
 
 ### Phase 0: Validate Credentials — COMPLETE
 
@@ -21,7 +21,7 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: IMAP/EWS result documented (both fail — basic auth blocked)
 - [x] **Exit**: Decision recorded — Tier 3
 
-### Phase 1: Foundation
+### Phase 1: Foundation — COMPLETE
 
 - [x] 1.1 Initialize project scaffold (`package.json`, `tsconfig.json`, `.eslintrc.json`, `.gitignore`, `.env.example`)
 - [x] 1.2 Install all dependencies
@@ -37,30 +37,30 @@ This guide tells Cursor (or any implementation engineer) exactly how to build th
 - [x] **Exit**: Sheets service reads from and writes to the Google Spreadsheet
 - [x] **Exit**: Local state store reads and writes JSON files atomically
 
-### Phase 2: Send Pipeline
+### Phase 2: Send Pipeline — COMPLETE
 
-- [ ] 2.1 Build `src/services/smtp.ts` — Nodemailer SMTP wrapper
-- [ ] 2.2 Build `src/utils/crypto.ts` — HMAC + base64url utilities
-- [ ] 2.3 Build `src/engine/unsubscribe.ts` — Token generation only
-- [ ] 2.4 Build `src/engine/sequence-engine.ts` — `evaluateContact()` function
-- [ ] 2.5 Write unit tests for sequence engine (9 test cases from spec)
-- [ ] 2.6 Build `src/engine/bounce-handler.ts` — `classifySmtpError()`, `recordBounce()`
-- [ ] 2.7 Build `src/engine/send-engine.ts` — `executeSendCycle()` function
-- [ ] 2.8 Create sample template `templates/test_step1.hbs`
-- [ ] 2.9 End-to-end test: send a real email through the full pipeline
-- [ ] **Exit**: SMTP service connects and sends emails
-- [ ] **Exit**: Sequence engine correctly identifies eligible contacts
-- [ ] **Exit**: Send engine orchestrates a full cycle (Sheets → eligibility → template → send → update)
-- [ ] **Exit**: Send Log tab gets new rows after a send cycle
-- [ ] **Exit**: Contacts tab gets updated (last_step_sent, last_send_date, status)
-- [ ] **Exit**: Bounce handler classifies SMTP errors and updates Sheets
+- [x] 2.1 Build `src/services/smtp.ts` — Nodemailer SMTP wrapper
+- [x] 2.2 Build `src/utils/crypto.ts` — HMAC + base64url utilities
+- [x] 2.3 Build `src/engine/unsubscribe.ts` — Token generation only
+- [x] 2.4 Build `src/engine/sequence-engine.ts` — `evaluateContact()` function
+- [x] 2.5 Write unit tests for sequence engine (9 test cases from spec)
+- [x] 2.6 Build `src/engine/bounce-handler.ts` — `classifySmtpError()`, `recordBounce()`
+- [x] 2.7 Build `src/engine/send-engine.ts` — `executeSendCycle()` function
+- [x] 2.8 Create sample template `templates/test_step1.hbs`
+- [x] 2.9 End-to-end test: send a real email through the full pipeline
+- [x] **Exit**: SMTP service connects and sends emails
+- [x] **Exit**: Sequence engine correctly identifies eligible contacts
+- [x] **Exit**: Send engine orchestrates a full cycle (Sheets → eligibility → template → send → update)
+- [x] **Exit**: Send Log tab gets new rows after a send cycle
+- [x] **Exit**: Contacts tab gets updated (last_step_sent, last_send_date, status)
+- [x] **Exit**: Bounce handler classifies SMTP errors and updates Sheets
 
-### Phase 3: Inbound Processing — TIER 3 PATH
+### Phase 3: Inbound Processing — TIER 3 PATH — COMPLETE
 
-- [ ] 3.1T3 Set `IMAP_ENABLED=false` in `.env.example`
-- [ ] 3.2T3 Verify system works without IMAP (no errors)
-- [ ] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
-- [ ] **Exit**: System runs correctly without IMAP
+- [x] 3.1T3 Set `IMAP_ENABLED=false` in `.env.example` (already set with Tier 3 comment)
+- [x] 3.2T3 Verify system works without IMAP (build clean, 9/9 tests pass, no imapflow imports)
+- [x] **Exit**: Manual workflow is documented (already in `docs/OPERATIONS.md`)
+- [x] **Exit**: System runs correctly without IMAP
 
 ### Phase 4: Unsubscribe System
 
@@ -117,6 +117,7 @@ Before writing any code, read these documents to understand the system:
 ## Step 2: Follow the Build Plan
 
 Open **[cursor/BUILD_PLAN.md](./BUILD_PLAN.md)** and execute phases in order:
+
 - Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6
 
 For granular task lists within each phase, see **[cursor/TASKS.md](./TASKS.md)**.
@@ -126,6 +127,7 @@ For granular task lists within each phase, see **[cursor/TASKS.md](./TASKS.md)**
 ## Step 3: Use Specs as Blueprints
 
 When building each module, open the corresponding spec from `/specs/`. Each spec contains:
+
 - The **public interface** (function signatures, types).
 - The **algorithm** (step-by-step pseudocode).
 - The **error handling** rules.
@@ -133,19 +135,19 @@ When building each module, open the corresponding spec from `/specs/`. Each spec
 
 The specs are written so you can translate them almost directly into TypeScript.
 
-| Module | Spec File |
-|---|---|
-| `src/services/smtp.ts` | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) (SMTP section) |
-| `src/services/imap.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (IMAP section) |
-| `src/services/sheets.ts` | [specs/SOURCE_SYNC.md](../specs/SOURCE_SYNC.md) |
-| `src/engine/send-engine.ts` | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) |
-| `src/engine/sequence-engine.ts` | [specs/SEQUENCE_ENGINE.md](../specs/SEQUENCE_ENGINE.md) |
-| `src/engine/reply-processor.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) |
-| `src/engine/bounce-handler.ts` | [specs/BOUNCE_HANDLER.md](../specs/BOUNCE_HANDLER.md) |
-| `src/engine/unsubscribe.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) |
-| `src/classifiers/reply-rules.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (rules section) |
-| `src/web/routes/unsubscribe.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (web section) |
-| `src/utils/crypto.ts` | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (crypto section) |
+| Module                           | Spec File                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| `src/services/smtp.ts`           | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md) (SMTP section)                 |
+| `src/services/imap.ts`           | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (IMAP section)         |
+| `src/services/sheets.ts`         | [specs/SOURCE_SYNC.md](../specs/SOURCE_SYNC.md)                                |
+| `src/engine/send-engine.ts`      | [specs/SEND_ENGINE.md](../specs/SEND_ENGINE.md)                                |
+| `src/engine/sequence-engine.ts`  | [specs/SEQUENCE_ENGINE.md](../specs/SEQUENCE_ENGINE.md)                        |
+| `src/engine/reply-processor.ts`  | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md)                        |
+| `src/engine/bounce-handler.ts`   | [specs/BOUNCE_HANDLER.md](../specs/BOUNCE_HANDLER.md)                          |
+| `src/engine/unsubscribe.ts`      | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md)                  |
+| `src/classifiers/reply-rules.ts` | [specs/REPLY_PROCESSOR.md](../specs/REPLY_PROCESSOR.md) (rules section)        |
+| `src/web/routes/unsubscribe.ts`  | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (web section)    |
+| `src/utils/crypto.ts`            | [specs/UNSUBSCRIBE_SYSTEM.md](../specs/UNSUBSCRIBE_SYSTEM.md) (crypto section) |
 
 ---
 
@@ -180,12 +182,15 @@ In practice, for this MVP it's acceptable to import the service singletons, but 
 Every significant action gets a log entry. Use structured fields:
 
 ```typescript
-logger.info({
-  module: 'send-engine',
-  contactEmail: contact.email,
-  step: 2,
-  messageId: result.messageId,
-}, 'Email sent successfully');
+logger.info(
+  {
+    module: "send-engine",
+    contactEmail: contact.email,
+    step: 2,
+    messageId: result.messageId,
+  },
+  "Email sent successfully",
+);
 ```
 
 Always include `module` and the relevant context fields.
@@ -213,6 +218,7 @@ Never hardcode values that should be configurable. If it might change (delays, b
 ### Quick Smoke Tests
 
 **Send pipeline smoke test:**
+
 ```bash
 # Add a test contact to the Contacts tab in Google Sheets.
 # Run the send engine once:
@@ -224,6 +230,7 @@ npx ts-node -e "
 ```
 
 **Unsubscribe smoke test:**
+
 ```bash
 # Start the web server.
 # Generate a test token:
