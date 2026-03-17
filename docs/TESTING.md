@@ -143,6 +143,12 @@ Run one processor pass and verify pause behavior:
 npm run test:reply-forward-pause -- contact@example.com
 ```
 
+If you already queued an event manually and only want to process existing queued events (no extra enqueue), run:
+
+```bash
+npm run test:reply-forward-pause -- contact@example.com --process-only
+```
+
 Expected result:
 
 - Forward email is sent to `REPLY_FORWARD_TO` from `.env`.

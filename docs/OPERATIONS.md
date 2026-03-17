@@ -138,6 +138,10 @@ If IMAP/EWS is not available, the human at `REPLY_FORWARD_TO` follows this proce
    ```bash
    npm run test:reply-forward-pause -- contact@example.com
    ```
+   If you already queued the event in step 2 and want to avoid enqueuing again:
+   ```bash
+   npm run test:reply-forward-pause -- contact@example.com --process-only
+   ```
 4. Confirm the contact is auto-paused:
    - `status = paused`
    - `reply_status = forwarded`
