@@ -1,7 +1,7 @@
 /**
  * PM2 process definition for production deployment.
  */
-export default {
+module.exports = {
   apps: [
     {
       name: 'deaton-outreach',
