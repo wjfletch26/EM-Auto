@@ -14,10 +14,12 @@ All configuration is loaded from a `.env` file at the project root. The config m
 | `SMTP_PASS` | string | Yes | Email account password | `(your password)` |
 | `SMTP_SECURE` | boolean | No | Use implicit TLS (true for port 465, false for STARTTLS on 587) | `false` |
 | `SMTP_FROM_NAME` | string | No | Display name for the "From" field | `Dave at Deaton Engineering` |
+| `REPLY_FORWARD_TO` | string | No | Default mailbox for forwarded inbound replies in Tier 3 workflow | `dknieriem@deatonengineering.com` |
 
 **Notes**:
 - `SMTP_SECURE=false` with port 587 means Nodemailer will use STARTTLS (upgrades to TLS after connecting). This is the correct setting for Microsoft 365.
 - The `SMTP_USER` value is also used as the envelope sender and Reply-To address.
+- `REPLY_FORWARD_TO` controls where inbound replies are forwarded for manual review.
 
 ---
 
@@ -114,6 +116,7 @@ SMTP_USER=dave@deatonengineering.us
 SMTP_PASS=your-email-password-here
 SMTP_SECURE=false
 SMTP_FROM_NAME=Dave at Deaton Engineering
+REPLY_FORWARD_TO=dknieriem@deatonengineering.com
 
 # --- IMAP (conditional — set IMAP_ENABLED=true if IMAP works) ---
 IMAP_ENABLED=false
@@ -166,6 +169,7 @@ export const configSchema = z.object({
     pass: z.string().min(1),
     secure: z.coerce.boolean().default(false),
     fromName: z.string().optional().default(''),
+    replyForwardTo: z.string().email().optional().default('dknieriem@deatonengineering.com'),
   }),
   imap: z.object({
     enabled: z.coerce.boolean().default(false),

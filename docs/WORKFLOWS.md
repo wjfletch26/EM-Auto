@@ -232,7 +232,7 @@ Bounces are detected at two levels:
 
 ## Workflow 6: Manual Reply Processing (Tier 3 Fallback)
 
-**Context**: If IMAP and EWS are not available, the human at `dknieriem@deatonengineering.com` handles reply processing manually.
+**Context**: If IMAP and EWS are not available, the human at `REPLY_FORWARD_TO` handles reply processing manually.
 
 **Steps**:
 

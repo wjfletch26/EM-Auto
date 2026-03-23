@@ -11,7 +11,7 @@ The system runs on a Linux VPS with no human interaction required during normal 
 - **From**: `dave@deatonengineering.us`
 - **Provider**: Microsoft 365 via GoDaddy
 - **Protocol**: SMTP with basic auth (SMTP AUTH confirmed enabled)
-- **Reply forwarding**: An Outlook rule forwards inbound replies to `dknieriem@deatonengineering.com` for human review
+- **Reply forwarding**: An Outlook rule forwards inbound replies to the mailbox configured in `REPLY_FORWARD_TO` for human review
 
 ## Core Capabilities
 
