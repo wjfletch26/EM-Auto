@@ -13,11 +13,21 @@ import { logger } from '../logging/logger.js';
 import type {
   Contact, ContactUpdate, Campaign,
   SendLogEntry, ReplyLogEntry,
+  CompanyIntelligence, CompanyIntelUpdate,
+  ReviewQueueEntry, ReviewQueueUpdate,
 } from './sheets-types.js';
-import { FIELD_TO_COLUMN } from './sheets-types.js';
+import {
+  FIELD_TO_COLUMN,
+  INTEL_FIELD_TO_COLUMN,
+  REVIEW_FIELD_TO_COLUMN,
+} from './sheets-types.js';
 
 // Re-export types so consumers only need one import
-export type { Contact, ContactUpdate, Campaign, SendLogEntry, ReplyLogEntry };
+export type {
+  Contact, ContactUpdate, Campaign, SendLogEntry, ReplyLogEntry,
+  CompanyIntelligence, CompanyIntelUpdate,
+  ReviewQueueEntry, ReviewQueueUpdate,
+};
 
 // ─── Singleton Sheets client ─────────────────────────────────────────────────
 
@@ -71,7 +81,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 export async function getContacts(): Promise<Contact[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Contacts!A2:V' })
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Contacts!A2:X' })
   );
 
   const rows = res.data.values || [];
@@ -84,8 +94,9 @@ export async function getContacts(): Promise<Contact[]> {
     const firstName = row[1]?.trim();
     const campaignId = row[5]?.trim();
 
-    // Validate required fields
-    if (!email || !email.includes('@') || !firstName || !campaignId) {
+    // Validate required fields — email and first name are mandatory.
+    // campaign_id is optional: pipeline contacts won't have one until approval.
+    if (!email || !email.includes('@') || !firstName) {
       logger.warn({ module: 'sheets', rowIndex: i + 2, email }, 'Skipping invalid contact row');
       continue;
     }
@@ -120,6 +131,8 @@ export async function getContacts(): Promise<Contact[]> {
       custom1: row[19] || '',
       custom2: row[20] || '',
       notes: row[21] || '',
+      companyUrl: row[22] || '',
+      pipelineStatus: row[23] || '',
       _rowIndex: i + 2, // 1-indexed, +1 for the header row
     });
   }
@@ -128,25 +141,50 @@ export async function getContacts(): Promise<Contact[]> {
   return contacts;
 }
 
-/** Reads all campaigns from the Campaigns tab. */
+/**
+ * Reads all campaigns from the Campaigns tab.
+ * Supports up to 12 steps. Each step uses 3 columns (template, subject, delay_days).
+ * Columns: A=id, B=name, C=total_steps, D-F=step1, G-I=step2, ... , AK-AM=step12, AN=active, AO=campaign_type
+ */
 export async function getCampaigns(): Promise<Campaign[]> {
   const sheets = await getClient();
+  // Read enough columns for 12 steps: A-AO (cols 0-40)
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Campaigns!A2:M' })
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Campaigns!A2:AO' })
   );
 
   const rows = res.data.values || [];
-  return rows.map((row) => ({
-    campaignId: row[0]?.trim() || '',
-    campaignName: row[1]?.trim() || '',
-    totalSteps: parseInt(row[2]) || 0,
-    steps: [
-      { stepNumber: 1, templateFile: row[3] || '', subject: row[4] || '', delayDays: parseInt(row[5]) || 0 },
-      { stepNumber: 2, templateFile: row[6] || '', subject: row[7] || '', delayDays: parseInt(row[8]) || 0 },
-      { stepNumber: 3, templateFile: row[9] || '', subject: row[10] || '', delayDays: parseInt(row[11]) || 0 },
-    ].filter((s) => s.templateFile),
-    active: row[12]?.toUpperCase() === 'TRUE',
-  }));
+  return rows.map((row) => {
+    const totalSteps = parseInt(row[2]) || 0;
+    const steps = [];
+
+    // Each step occupies 3 columns starting at index 3 (col D)
+    for (let s = 0; s < Math.min(totalSteps, 12); s++) {
+      const base = 3 + s * 3;
+      const templateFile = row[base] || '';
+      if (templateFile) {
+        steps.push({
+          stepNumber: s + 1,
+          templateFile,
+          subject: row[base + 1] || '',
+          delayDays: parseInt(row[base + 2]) || 0,
+        });
+      }
+    }
+
+    // active is at column index 3 + 12*3 = 39, campaign_type at 40
+    const activeIdx = 3 + 12 * 3; // col AN (index 39)
+    const typeIdx = activeIdx + 1;  // col AO (index 40)
+
+    return {
+      campaignId: row[0]?.trim() || '',
+      campaignName: row[1]?.trim() || '',
+      totalSteps,
+      steps,
+      active: row[activeIdx]?.toUpperCase() === 'TRUE',
+      campaignType: (row[typeIdx]?.trim() || 'template') as 'template' | 'ai_generated',
+    };
+  });
 }
 
 /** Reads the Send Log for deduplication checks. */
@@ -261,6 +299,162 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
           entry.subjectSnippet, entry.bodySnippet, entry.source,
         ]],
       },
+    })
+  );
+}
+
+// ─── Company Intelligence Tab ────────────────────────────────────────────────
+
+/** Reads all rows from the Company Intelligence tab. */
+export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
+  const sheets = await getClient();
+  const res = await withRetry(() =>
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Company Intelligence'!A2:R" })
+  );
+
+  const rows = res.data.values || [];
+  return rows.map((row, i) => ({
+    contactEmail: row[0]?.trim().toLowerCase() || '',
+    companyUrl: row[1] || '',
+    companyName: row[2] || '',
+    industry: row[3] || '',
+    productSummary: row[4] || '',
+    companySize: row[5] || '',
+    signals: row[6] || '',
+    signalSummary: row[7] || '',
+    deatonCapabilitiesMatched: row[8] || '',
+    caseStudiesSelected: row[9] || '',
+    alignmentRationale: row[10] || '',
+    confidenceScore: row[11] || '',
+    davidProjectNotes: row[12] || '',
+    executiveBrief: row[13] || '',
+    pipelineStatus: row[14] || '',
+    researchedDate: row[15] || '',
+    generatedDate: row[16] || '',
+    errorLog: row[17] || '',
+    _rowIndex: i + 2,
+  }));
+}
+
+/** Appends a new row to the Company Intelligence tab. */
+export async function appendCompanyIntelligence(entry: Omit<CompanyIntelligence, '_rowIndex'>): Promise<void> {
+  const sheets = await getClient();
+  await withRetry(() =>
+    sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Intelligence'!A:R",
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[
+          entry.contactEmail, entry.companyUrl, entry.companyName,
+          entry.industry, entry.productSummary, entry.companySize,
+          entry.signals, entry.signalSummary, entry.deatonCapabilitiesMatched,
+          entry.caseStudiesSelected, entry.alignmentRationale, entry.confidenceScore,
+          entry.davidProjectNotes, entry.executiveBrief, entry.pipelineStatus,
+          entry.researchedDate, entry.generatedDate, entry.errorLog,
+        ]],
+      },
+    })
+  );
+  logger.info({ module: 'sheets', email: entry.contactEmail }, 'Company intelligence row appended');
+}
+
+/** Updates specific fields on a Company Intelligence row. */
+export async function updateCompanyIntelligence(
+  contactEmail: string,
+  rowIndex: number,
+  updates: Partial<CompanyIntelUpdate>,
+): Promise<void> {
+  const sheets = await getClient();
+  const data: sheets_v4.Schema$ValueRange[] = [];
+
+  for (const [field, value] of Object.entries(updates)) {
+    const col = INTEL_FIELD_TO_COLUMN[field as keyof CompanyIntelUpdate];
+    if (!col) continue;
+    data.push({ range: `'Company Intelligence'!${col}${rowIndex}`, values: [[value]] });
+  }
+
+  if (data.length === 0) return;
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data },
+    })
+  );
+
+  logger.info({ module: 'sheets', email: contactEmail, fields: Object.keys(updates) }, 'Company intelligence updated');
+}
+
+// ─── Review Queue Tab ────────────────────────────────────────────────────────
+
+/** Reads all rows from the Review Queue tab. */
+export async function getReviewQueue(): Promise<ReviewQueueEntry[]> {
+  const sheets = await getClient();
+  const res = await withRetry(() =>
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Review Queue'!A2:K" })
+  );
+
+  const rows = res.data.values || [];
+  return rows.map((row, i) => ({
+    contactEmail: row[0]?.trim().toLowerCase() || '',
+    companyName: row[1] || '',
+    stepNumber: parseInt(row[2]) || 0,
+    emailPurpose: row[3] || '',
+    subject: row[4] || '',
+    body: row[5] || '',
+    status: row[6]?.trim().toLowerCase() || '',
+    reviewerNotes: row[7] || '',
+    generatedDate: row[8] || '',
+    approvedDate: row[9] || '',
+    campaignId: row[10] || '',
+    _rowIndex: i + 2,
+  }));
+}
+
+/** Appends a batch of emails (typically 12) to the Review Queue tab. */
+export async function appendReviewQueueBatch(entries: Omit<ReviewQueueEntry, '_rowIndex'>[]): Promise<void> {
+  const sheets = await getClient();
+  const values = entries.map((e) => [
+    e.contactEmail, e.companyName, e.stepNumber, e.emailPurpose,
+    e.subject, e.body, e.status, e.reviewerNotes,
+    e.generatedDate, e.approvedDate, e.campaignId,
+  ]);
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Review Queue'!A:K",
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values },
+    })
+  );
+
+  logger.info({ module: 'sheets', count: entries.length }, 'Review queue entries appended');
+}
+
+/** Updates specific fields on a Review Queue row. */
+export async function updateReviewQueueEntry(
+  rowIndex: number,
+  updates: Partial<ReviewQueueUpdate>,
+): Promise<void> {
+  const sheets = await getClient();
+  const data: sheets_v4.Schema$ValueRange[] = [];
+
+  for (const [field, value] of Object.entries(updates)) {
+    const col = REVIEW_FIELD_TO_COLUMN[field as keyof ReviewQueueUpdate];
+    if (!col) continue;
+    data.push({ range: `'Review Queue'!${col}${rowIndex}`, values: [[value]] });
+  }
+
+  if (data.length === 0) return;
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data },
     })
   );
 }

@@ -1,0 +1,57 @@
+# =============================================================================
+# Case Study: Honda Tier 1 Supplier — Semi-Automated Manufacturing Line
+# =============================================================================
+# Demonstrates Deaton's ability to design flexible manufacturing lines
+# meeting automotive quality standards with poka-yoke error prevention.
+# =============================================================================
+
+id: honda-assembly-line
+
+client_name: Honda Motor Co. Tier 1 Supplier
+client_industry: automotive manufacturing
+client_type: Tier 1 automotive parts supplier
+
+project_type: automation-design
+
+challenge: >
+  A Tier 1 supplier to Honda needed to expand manufacturing capacity at their
+  Mexican facility. The challenge was to design and fabricate a semi-automated
+  line to assemble and test airbag horn assemblies at a rate of one every 29
+  seconds. The line had to handle 19 product variations, reduce changeover
+  time, and meet strict Automotive TS 16949:2002 quality and record-keeping
+  standards.
+
+solution: >
+  Deaton designed an 11-station manufacturing line integrating quality
+  assurance and testing, including electrical testing, ultrasonic welding,
+  mechanical testing, and final packout. Poka-yoke design eliminated
+  left/right hand part substitution errors. HMIs provided assembly
+  instructions in the operator's language and controlled all machine
+  operations. Bar-coded part numbers enabled pre-configured changeovers,
+  with records retained for 30 years over a secure wireless network.
+  Additional lines were later designed for a Brazilian facility.
+
+results:
+  - "Product changeover reduced from 6 hours to less than 2 hours"
+  - "Universal design handling 19 product variations"
+  - "Bar code part and subassembly management with 30-year record retention"
+  - "Automated failure detection with locked-down parts requiring authorized release"
+  - "Additional manufacturing lines designed for Brazilian facility"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - process_and_facility_engineering
+
+tags:
+  - automotive
+  - manufacturing-line
+  - poka-yoke
+  - ultrasonic-welding
+  - HMI
+  - quality-assurance
+  - TS-16949
+  - bar-code
+  - multi-product
+  - Mexico
+  - Brazil
+  - assembly

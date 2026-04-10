@@ -39,6 +39,8 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     custom1: '',
     custom2: '',
     notes: '',
+    companyUrl: '',
+    pipelineStatus: '',
     _rowIndex: 2,
     ...overrides,
   };
@@ -56,6 +58,7 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
       { stepNumber: 3, templateFile: 'q1_step3.hbs', subject: 'Last check-in', delayDays: 5 },
     ],
     active: true,
+    campaignType: 'template',
     ...overrides,
   };
 }

@@ -1,0 +1,49 @@
+# =============================================================================
+# Case Study: Ignite! Learning — Curriculum On Wheels (COW)
+# =============================================================================
+# Demonstrates Deaton's rapid product development and low-volume
+# manufacturing capabilities, delivering from concept to shipment in 6 weeks.
+# =============================================================================
+
+id: ignite-learning-cow
+
+client_name: Ignite! Learning
+client_industry: education technology
+client_type: Educational media and hardware company
+
+project_type: product-development
+
+challenge: >
+  Ignite! needed to design, prototype, and begin shipping a self-contained
+  multimedia curriculum tool — the Curriculum on Wheels (COW) — in just six
+  weeks. The device featured a built-in computer, LCD projector, and speakers.
+  The overriding requirement was simplicity: elementary and middle school
+  teachers had to be able to simply plug in and begin a lesson.
+
+solution: >
+  Deaton designed and prototyped the COW, developed manufacturing and quality
+  assurance procedures, and manufactured the first 1,000 units. Versions were
+  designed for both US and international markets. Deaton provided fulfillment
+  services and drop-shipped units worldwide, then transitioned manufacture to
+  a lower-cost domestic contract manufacturer for ongoing production.
+
+results:
+  - "Award-winning product delivered on time and on budget in 6 weeks"
+  - "First 1,000 units manufactured by Deaton"
+  - "US and international market versions designed"
+  - "Fulfillment and worldwide drop-shipping provided"
+  - "Successfully transitioned to lower-cost contract manufacturer"
+
+capabilities_demonstrated:
+  - product_development
+  - low_volume_manufacturing
+
+tags:
+  - rapid-prototyping
+  - education
+  - consumer-electronics
+  - manufacturing
+  - fulfillment
+  - quality-assurance
+  - international
+  - tight-deadline

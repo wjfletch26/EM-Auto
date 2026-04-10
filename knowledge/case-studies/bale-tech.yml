@@ -1,0 +1,53 @@
+# =============================================================================
+# Case Study: TLA-Bale Tech — Portable Waste Baling System
+# =============================================================================
+# Demonstrates Deaton's ability to take a concept through full production
+# documentation for heavy-duty industrial equipment.
+# =============================================================================
+
+id: bale-tech
+
+client_name: TLA - Bale Tech, LLC
+client_industry: waste management / transportation
+client_type: Rail-based waste transportation and recycling subsidiary of Transload America
+
+project_type: concept-through-commissioning
+
+challenge: >
+  TLA-Bale Tech needed to design, engineer, and produce manufacturing
+  documentation for a portable stretch-wrap baling system. The system had to
+  support continuous processing while being portable enough for standby
+  deployment during natural disasters, military operations, and economic
+  disruptions. They wanted to leverage decades of baling experience into a
+  next-generation portable solution that was environmentally friendly,
+  operationally efficient, and cost-effective.
+
+solution: >
+  Deaton Engineering produced the Bale Tech III, a patented high-speed
+  stretch-wrap portable baling system. The fully automated system creates
+  hermetically sealed, high-density cylindrical bales of shredded waste with
+  standardized 3-ton weight. Bales do not leak or emit odors, making them
+  ideal for long-term storage and multi-modal transportation. The system
+  features remote diagnostics and performance data collection, with less than
+  one day setup time.
+
+results:
+  - "Patented stretch-wrap baling technology"
+  - "Fully automated seamless processing with remote diagnostics"
+  - "Portable system with less than one day setup time"
+  - "Cycle time of one bale per 80-130 seconds, approximately 120 tons/hour"
+  - "Hermetically sealed bales at 1,400-1,700 lbs per cubic yard density"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+
+tags:
+  - waste-management
+  - portable-equipment
+  - heavy-industry
+  - automation
+  - patented-technology
+  - remote-diagnostics
+  - continuous-processing
+  - manufacturing-documentation

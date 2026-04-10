@@ -23,7 +23,7 @@ import {
   savePendingSends, clearPendingSends, saveLastRun,
   type PendingContact,
 } from '../state/local-store.js';
-import type { Contact, Campaign, CampaignStep } from '../services/sheets-types.js';
+import type { Contact, Campaign, CampaignStep, ReviewQueueEntry } from '../services/sheets-types.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -179,31 +179,49 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
       const campaign = campaignMap.get(contact.campaignId)!;
 
       try {
-        // Load the template
-        const templateSource = loadTemplate(step.templateFile);
-        if (templateSource === null) {
-          skipped++;
-          updatePendingStatus(pendingContacts, i, 'failed');
-          continue;
-        }
-
-        // Build the template context
+        let html: string;
+        let subject: string;
+        let text: string;
         const unsubscribeUrl = generateUnsubscribeUrl(contact.email);
-        const context = {
-          first_name: contact.firstName,
-          last_name: contact.lastName,
-          company: contact.company,
-          title: contact.title,
-          custom_1: contact.custom1,
-          custom_2: contact.custom2,
-          unsubscribe_url: unsubscribeUrl,
-          physical_address: config.app.physicalAddress,
-        };
 
-        // Render HTML body and subject line
-        const html = Handlebars.compile(templateSource)(context);
-        const subject = Handlebars.compile(step.subject)(context);
-        const text = stripHtml(html);
+        if (campaign.campaignType === 'ai_generated' && step.templateFile.startsWith('ai_review_queue:')) {
+          // AI-generated campaign — read pre-approved body from Review Queue
+          const resolved = await resolveAIEmail(step);
+          if (!resolved) {
+            skipped++;
+            updatePendingStatus(pendingContacts, i, 'failed');
+            continue;
+          }
+          // AI emails are plain text — wrap in simple HTML with unsub footer
+          html = `<p>${resolved.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+            + `<hr><p style="font-size:11px;color:#999;">${config.app.physicalAddress}<br>`
+            + `<a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
+          subject = resolved.subject;
+          text = `${resolved.body}\n\n---\n${config.app.physicalAddress}\nUnsubscribe: ${unsubscribeUrl}`;
+        } else {
+          // Template-based campaign — existing Handlebars path
+          const templateSource = loadTemplate(step.templateFile);
+          if (templateSource === null) {
+            skipped++;
+            updatePendingStatus(pendingContacts, i, 'failed');
+            continue;
+          }
+
+          const context = {
+            first_name: contact.firstName,
+            last_name: contact.lastName,
+            company: contact.company,
+            title: contact.title,
+            custom_1: contact.custom1,
+            custom_2: contact.custom2,
+            unsubscribe_url: unsubscribeUrl,
+            physical_address: config.app.physicalAddress,
+          };
+
+          html = Handlebars.compile(templateSource)(context);
+          subject = Handlebars.compile(step.subject)(context);
+          text = stripHtml(html);
+        }
 
         // Update pending state to "sending"
         updatePendingStatus(pendingContacts, i, 'sending');
@@ -363,6 +381,36 @@ async function handleSmtpError(
     const msg = logErr instanceof Error ? logErr.message : String(logErr);
     logger.error({ module: 'send-engine', error: msg }, 'Failed to write send log entry');
   }
+}
+
+/**
+ * Resolves an AI-generated email from the Review Queue.
+ * The templateFile has format "ai_review_queue:<rowIndex>".
+ */
+async function resolveAIEmail(
+  step: CampaignStep,
+): Promise<{ subject: string; body: string } | null> {
+  const rowIndexStr = step.templateFile.replace('ai_review_queue:', '');
+  const rowIndex = parseInt(rowIndexStr);
+  if (isNaN(rowIndex)) {
+    logger.error({ module: 'send-engine', templateFile: step.templateFile }, 'Invalid AI email row reference');
+    return null;
+  }
+
+  // Read the Review Queue to find this specific row
+  const queue = await sheets.getReviewQueue();
+  const entry = queue.find((e: ReviewQueueEntry) => e._rowIndex === rowIndex);
+  if (!entry) {
+    logger.error({ module: 'send-engine', rowIndex }, 'Review Queue entry not found');
+    return null;
+  }
+
+  if (entry.status !== 'approved') {
+    logger.warn({ module: 'send-engine', rowIndex, status: entry.status }, 'Review Queue entry not approved');
+    return null;
+  }
+
+  return { subject: entry.subject, body: entry.body };
 }
 
 /** Handles rejected recipients (accepted by server but recipient rejected). */

@@ -63,6 +63,20 @@ function buildRawConfig() {
       nodeEnv: env.NODE_ENV,
       physicalAddress: env.PHYSICAL_ADDRESS,
     },
+    pipeline: {
+      enabled: env.PIPELINE_ENABLED,
+      cron: env.PIPELINE_CRON,
+    },
+    perplexity: {
+      apiKey: env.PERPLEXITY_API_KEY,
+      model: env.PERPLEXITY_MODEL,
+    },
+    llm: {
+      provider: env.LLM_PROVIDER,
+      apiKey: env.LLM_API_KEY,
+      model: env.LLM_MODEL,
+      baseUrl: env.LLM_BASE_URL,
+    },
   };
 }
 
@@ -124,5 +138,16 @@ export function getRedactedConfig(): Record<string, unknown> {
     schedule: config.schedule,
     logging: config.logging,
     app: config.app,
+    pipeline: config.pipeline,
+    perplexity: {
+      apiKey: config.perplexity.apiKey ? '***REDACTED***' : '(not set)',
+      model: config.perplexity.model,
+    },
+    llm: {
+      provider: config.llm.provider,
+      apiKey: config.llm.apiKey ? '***REDACTED***' : '(not set)',
+      model: config.llm.model,
+      baseUrl: config.llm.baseUrl,
+    },
   };
 }

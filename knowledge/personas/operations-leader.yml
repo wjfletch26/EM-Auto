@@ -1,0 +1,52 @@
+# =============================================================================
+# Operations Leader Persona — VP Ops, Plant Manager, Manufacturing Director
+# =============================================================================
+# Operations leaders care about throughput, uptime, efficiency, and
+# minimizing disruption. They need proof that Deaton can deliver on time
+# and that automation will actually work on the floor.
+# =============================================================================
+
+id: operations-leader
+name: Operations Leader (VP Ops, Plant Manager, Manufacturing Director)
+
+# Title patterns that match this persona
+title_patterns:
+  - VP of Operations
+  - VP Operations
+  - Director of Operations
+  - Operations Director
+  - Operations Manager
+  - Plant Manager
+  - Manufacturing Director
+  - Manufacturing Manager
+  - Production Manager
+  - Production Director
+  - Head of Manufacturing
+  - Head of Operations
+  - Supply Chain Director
+  - Facility Manager
+
+messaging_angle: >
+  Lead with operational impact — throughput, efficiency, uptime, and
+  reduction of manual processes. Position Deaton as a partner who
+  understands manufacturing realities and can deliver automation that
+  works on the floor, not just in theory. Emphasize process engineering
+  and facility expertise.
+
+priorities:
+  - Operational efficiency and throughput
+  - Minimizing production downtime during changes
+  - Automation that integrates with existing systems
+  - Regulatory compliance (FDA, USDA, EPA)
+  - On-time, on-budget delivery
+
+tone: >
+  Practical and results-oriented. Speak to operational realities.
+  Show understanding of manufacturing constraints. Concrete examples
+  over abstract capabilities.
+
+avoid:
+  - Abstract or theoretical language
+  - Ignoring implementation and integration challenges
+  - Downplaying the complexity of production environments
+  - Promises without proof of similar successful implementations

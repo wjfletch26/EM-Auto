@@ -1,0 +1,56 @@
+# =============================================================================
+# Case Study: Pharmaceutical APCS Validation
+# =============================================================================
+# Demonstrates Deaton's FDA validation expertise for automated process
+# control systems in pharmaceutical manufacturing.
+# =============================================================================
+
+id: apcs-pharma-validation
+
+client_name: Major US Pharmaceutical Manufacturer
+client_industry: pharmaceuticals
+client_type: Sterile drug product manufacturer
+
+project_type: validation
+
+challenge: >
+  A major pharmaceutical manufacturer needed 21 CFR Part 11 compliant
+  validation of an Automated Process Control System (APCS) for a new
+  high-volume autofiller packaging machine. The machine formed, filled, and
+  sealed bags containing drug product solution. The APCS consisted of five
+  HMIs, three PLCs, and an array of sensors. If successful, it would
+  eliminate three existing production processes. There was very little
+  experience with the new machine, and validation had to be completed under
+  a tight deadline for inclusion in a New Drug Application (NDA) filing.
+
+solution: >
+  Deaton quickly developed a validation plan covering scope, responsibilities,
+  strategy, and technical challenges. Engineers reviewed the entire system to
+  assess risks and identify technical hurdles. Deaton created a functional
+  specification, documented risk assessment, design specification, and
+  installation and operational qualification protocols. Each validation
+  experiment was executed with minimal impact on production. A GMP-compliant
+  validation report was delivered for FDA review.
+
+results:
+  - "Report reviewed by FDA without inquiries or comments"
+  - "Project completed and report delivered in time for NDA submission"
+  - "Validated a system that eliminated three existing production processes"
+  - "Professional risk assessment conducted on new technology"
+
+capabilities_demonstrated:
+  - validation_and_compliance
+
+tags:
+  - pharma
+  - FDA
+  - 21-CFR-Part-11
+  - GMP
+  - APCS
+  - PLC
+  - HMI
+  - NDA
+  - sterile-products
+  - packaging
+  - risk-assessment
+  - life-sciences

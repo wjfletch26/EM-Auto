@@ -27,6 +27,10 @@ export interface Contact {
   custom1: string;
   custom2: string;
   notes: string;
+  /** Company website URL — used by the intelligence pipeline. */
+  companyUrl: string;
+  /** Pipeline status — tracks the contact through the intelligence pipeline. */
+  pipelineStatus: string;
   /** 1-indexed row number in the sheet — used for targeted cell updates. */
   _rowIndex: number;
 }
@@ -46,6 +50,7 @@ export interface ContactUpdate {
   bounceType: string;
   bounceDate: string;
   softBounceCount: number;
+  pipelineStatus: string;
 }
 
 /** A single step within a campaign sequence. */
@@ -63,6 +68,8 @@ export interface Campaign {
   totalSteps: number;
   steps: CampaignStep[];
   active: boolean;
+  /** 'template' for Handlebars campaigns, 'ai_generated' for pipeline-created ones. */
+  campaignType: 'template' | 'ai_generated';
 }
 
 /** A row from the Send Log tab (append-only). */
@@ -105,4 +112,104 @@ export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
   bounceType: 'Q',
   bounceDate: 'R',
   softBounceCount: 'S',
+  pipelineStatus: 'X',
+};
+
+// ─── Company Intelligence Tab Types ──────────────────────────────────────────
+
+/** A row from the Company Intelligence tab. */
+export interface CompanyIntelligence {
+  contactEmail: string;
+  companyUrl: string;
+  companyName: string;
+  industry: string;
+  productSummary: string;
+  companySize: string;
+  signals: string;
+  signalSummary: string;
+  deatonCapabilitiesMatched: string;
+  caseStudiesSelected: string;
+  alignmentRationale: string;
+  confidenceScore: string;
+  davidProjectNotes: string;
+  executiveBrief: string;
+  pipelineStatus: string;
+  researchedDate: string;
+  generatedDate: string;
+  errorLog: string;
+  /** 1-indexed row number in the sheet. */
+  _rowIndex: number;
+}
+
+/** Fields the pipeline can update on a Company Intelligence row. */
+export interface CompanyIntelUpdate {
+  companyName: string;
+  industry: string;
+  productSummary: string;
+  companySize: string;
+  signals: string;
+  signalSummary: string;
+  deatonCapabilitiesMatched: string;
+  caseStudiesSelected: string;
+  alignmentRationale: string;
+  confidenceScore: string;
+  executiveBrief: string;
+  pipelineStatus: string;
+  researchedDate: string;
+  generatedDate: string;
+  errorLog: string;
+}
+
+/** Maps CompanyIntelUpdate fields to column letters in Company Intelligence tab. */
+export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
+  companyName: 'C',
+  industry: 'D',
+  productSummary: 'E',
+  companySize: 'F',
+  signals: 'G',
+  signalSummary: 'H',
+  deatonCapabilitiesMatched: 'I',
+  caseStudiesSelected: 'J',
+  alignmentRationale: 'K',
+  confidenceScore: 'L',
+  executiveBrief: 'N',
+  pipelineStatus: 'O',
+  researchedDate: 'P',
+  generatedDate: 'Q',
+  errorLog: 'R',
+};
+
+// ─── Review Queue Tab Types ──────────────────────────────────────────────────
+
+/** A row from the Review Queue tab. */
+export interface ReviewQueueEntry {
+  contactEmail: string;
+  companyName: string;
+  stepNumber: number;
+  emailPurpose: string;
+  subject: string;
+  body: string;
+  status: string;
+  reviewerNotes: string;
+  generatedDate: string;
+  approvedDate: string;
+  campaignId: string;
+  /** 1-indexed row number in the sheet. */
+  _rowIndex: number;
+}
+
+/** Fields that can be updated on a Review Queue row. */
+export interface ReviewQueueUpdate {
+  status: string;
+  reviewerNotes: string;
+  approvedDate: string;
+  campaignId: string;
+}
+
+/** Maps ReviewQueueUpdate fields to column letters in Review Queue tab. */
+export const REVIEW_FIELD_TO_COLUMN: Record<keyof ReviewQueueUpdate, string> = {
+  status: 'G',
+  reviewerNotes: 'H',
+  approvedDate: 'J',
+  campaignId: 'K',
 };

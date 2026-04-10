@@ -1,0 +1,64 @@
+# =============================================================================
+# Case Study: iFLY — 20-Year Partnership Across 9 Generations of Wind Tunnels
+# =============================================================================
+# Deaton's longest and most well-known engagement. Demonstrates ability to
+# execute first-of-their-kind programs at massive scale, including the
+# world's largest wind tunnel and recirculating tunnels on cruise ships.
+# =============================================================================
+
+id: ifly-wind-tunnel
+
+client_name: iFLY
+client_industry: entertainment / aerospace simulation
+client_type: Indoor skydiving / vertical wind tunnel operator
+
+project_type: concept-through-commissioning
+
+challenge: >
+  iFLY needed an engineering partner who could evolve with them across nearly
+  all 9 generations of wind tunnel systems over 20 years. Challenges included
+  airflow sealing, integrated sound dampening, assembly and installation
+  logistics, sealed joints between critical components, and shipping modular
+  designs worldwide. The crown jewel — the world's largest wind tunnel — was
+  a 32-foot diameter, 104-foot high flight chamber with a 10-story structure
+  and 16 fans generating over 7 megawatts of power.
+
+solution: >
+  Deaton partnered with iFLY from concept through commissioning at every
+  phase: whiteboard brainstorming with diverse teams of fabricators,
+  structural and controls engineers, architects, and aerodynamicists;
+  designing manufacturable components using FEA and hand calculations;
+  creating configurable components for multiple product offerings; developing
+  standard fabrication and procedural documents; and working with installers
+  to improve field assembly. For the world's largest tunnel, Deaton managed
+  enormous parametric SolidWorks models, performed critical structural
+  analysis for wind loads orders of magnitude beyond previous designs, and
+  solved challenging architectural interfaces.
+
+results:
+  - "20-year partnership spanning nearly all 9 generations of tunnel systems"
+  - "Delivered the world's largest vertical wind tunnel (32ft diameter, 104ft high)"
+  - "Designed recirculating wind tunnels for cruise ships"
+  - "Modular designs fitting shipping containers for worldwide deployment"
+  - "Integrated sound dampening with chilled turning vanes for air conditioning"
+  - "Repeat business across standard and custom projects"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+  - process_and_facility_engineering
+
+tags:
+  - first-of-kind
+  - large-scale
+  - mechanical-design
+  - airflow
+  - custom-equipment
+  - entertainment
+  - aerospace
+  - SolidWorks
+  - FEA
+  - structural-analysis
+  - modular-design
+  - cruise-ship
+  - long-term-partnership

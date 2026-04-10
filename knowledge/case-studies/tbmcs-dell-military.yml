@@ -1,0 +1,59 @@
+# =============================================================================
+# Case Study: Dell / US Air Force — Theater Battle Management Core Systems
+# =============================================================================
+# Demonstrates Deaton's capability for military-hardened design, custom
+# hardware integration, and full product assembly with quality assurance.
+# =============================================================================
+
+id: tbmcs-dell-military
+
+client_name: Dell Defense Services
+client_industry: defense / military
+client_type: Government/military IT hardware solutions provider
+
+project_type: concept-through-commissioning
+
+challenge: >
+  The US Air Force contracted Dell to produce TBMCS (Theater Battle
+  Management Core Systems), an integrated deployable network system. System
+  components had to be mounted in hardened cases, stabilized with custom
+  hardware, and interconnected through signal entry panels for convenient
+  field access. Rather than using multiple vendors, Dell hired Deaton to
+  design, manufacture, integrate the complete product solution, and ship
+  direct to the customer.
+
+solution: >
+  Deaton created innovative stabilization hardware including a unique wedge
+  bracket, support plate, and redundant tie-down straps to meet the
+  military's rigid deployment requirements. All support hardware could be
+  installed or removed using a single standard tool. Custom-labeled signal
+  entry panels provided single-interface connectivity, significantly reducing
+  field setup and configuration time. Deaton also developed modular solutions
+  for 19-inch rack integration, provided procurement and inventory
+  management, and performed complete assembly with quality assurance
+  inspection prior to shipment.
+
+results:
+  - "Met military's rigid deployment requirements for ruggedized equipment"
+  - "Custom signal entry panels reduced field setup and configuration time"
+  - "Single-tool installation/removal design for all support hardware"
+  - "Complete procurement, assembly, QA inspection, and direct shipment"
+  - "Modular solutions for 19-inch rack configurations"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+  - low_volume_manufacturing
+
+tags:
+  - defense
+  - military
+  - ruggedized
+  - Dell
+  - US-Air-Force
+  - rack-mount
+  - custom-hardware
+  - assembly
+  - quality-assurance
+  - deployment
+  - integration

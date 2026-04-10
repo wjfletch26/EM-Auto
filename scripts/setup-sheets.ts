@@ -13,6 +13,15 @@ dotenv.config();
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!;
 const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './credentials/service-account.json';
 
+// Build step headers for Campaigns tab (12 steps × 3 columns each)
+function buildCampaignStepHeaders(): string[] {
+  const headers: string[] = [];
+  for (let i = 1; i <= 12; i++) {
+    headers.push(`step_${i}_template`, `step_${i}_subject`, `step_${i}_delay_days`);
+  }
+  return headers;
+}
+
 // Tab definitions: name → header row
 const TABS: Record<string, string[]> = {
   Contacts: [
@@ -22,13 +31,12 @@ const TABS: Record<string, string[]> = {
     'unsubscribed', 'unsubscribe_date', 'unsubscribe_source',
     'bounced', 'bounce_type', 'bounce_date', 'soft_bounce_count',
     'custom_1', 'custom_2', 'notes',
+    'company_url', 'pipeline_status',
   ],
   Campaigns: [
     'campaign_id', 'campaign_name', 'total_steps',
-    'step_1_template', 'step_1_subject', 'step_1_delay_days',
-    'step_2_template', 'step_2_subject', 'step_2_delay_days',
-    'step_3_template', 'step_3_subject', 'step_3_delay_days',
-    'active',
+    ...buildCampaignStepHeaders(),
+    'active', 'campaign_type',
   ],
   'Send Log': [
     'timestamp', 'contact_email', 'campaign_id', 'step',
@@ -38,7 +46,32 @@ const TABS: Record<string, string[]> = {
     'timestamp', 'contact_email', 'classification',
     'subject_snippet', 'body_snippet', 'source',
   ],
+  'Company Intelligence': [
+    'contact_email', 'company_url', 'company_name', 'industry',
+    'product_summary', 'company_size', 'signals', 'signal_summary',
+    'deaton_capabilities_matched', 'case_studies_selected',
+    'alignment_rationale', 'confidence_score', 'david_project_notes',
+    'executive_brief', 'pipeline_status', 'researched_date',
+    'generated_date', 'error_log',
+  ],
+  'Review Queue': [
+    'contact_email', 'company_name', 'step_number', 'email_purpose',
+    'subject', 'body', 'status', 'reviewer_notes',
+    'generated_date', 'approved_date', 'campaign_id',
+  ],
 };
+
+/** Converts a 1-based column number to a letter (1=A, 26=Z, 27=AA, etc). */
+function columnLetter(colNum: number): string {
+  let letter = '';
+  let num = colNum;
+  while (num > 0) {
+    const mod = (num - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    num = Math.floor((num - 1) / 26);
+  }
+  return letter;
+}
 
 async function main() {
   // Authenticate with service account
@@ -86,7 +119,7 @@ async function main() {
 
   // Write headers to each tab
   const headerData = Object.entries(TABS).map(([tabName, headers]) => ({
-    range: `'${tabName}'!A1:${String.fromCharCode(64 + headers.length)}1`,
+    range: `'${tabName}'!A1:${columnLetter(headers.length)}1`,
     values: [headers],
   }));
 

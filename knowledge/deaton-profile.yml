@@ -1,0 +1,113 @@
+# =============================================================================
+# Deaton Engineering — Company Profile for AI Pipeline
+# =============================================================================
+# This file is the system's "identity document" for Deaton. The alignment skill
+# reads this alongside case studies to match target companies to Deaton's
+# capabilities. Keep it factual and structured.
+# =============================================================================
+
+company_name: Deaton Engineering
+tagline: >
+  Full-service firm specializing in the design, development, and manufacture
+  of first-of-their-kind machines, automation, and robotic systems.
+
+# What Deaton fundamentally does for clients
+value_proposition: >
+  Acts as a multidisciplinary partner to help clients expand their in-house
+  capabilities for complex engineering challenges. Provides a "concept through
+  commissioning" service model.
+
+# --- Core Capabilities ---
+# Each entry is a capability area with a short description.
+# The alignment skill matches these against target company needs.
+capabilities:
+  machine_and_automation_design:
+    name: Machine & Automation Design
+    description: >
+      Engineering complex mechanical and electrical systems, including
+      industrial robots, vision systems, and specialized manufacturing
+      equipment.
+
+  product_development:
+    name: Product Development
+    description: >
+      Turnkey design and prototyping using a phased approach to accelerate
+      time-to-market and improve ROI.
+
+  process_and_facility_engineering:
+    name: Process & Facility Engineering
+    description: >
+      Optimizing manufacturing layouts, implementing automation, and managing
+      facility changes to improve operational efficiency.
+
+  validation_and_compliance:
+    name: Validation & Compliance
+    description: >
+      Comprehensive documentation and testing that meets strict FDA, USDA,
+      and EPA regulatory requirements.
+
+  low_volume_manufacturing:
+    name: Low-Volume Manufacturing
+    description: >
+      Alternative to offshore manufacturing for early-stage products.
+      Manages engineering changes on the fly.
+
+# --- Industries Served ---
+# Grouped by sector. Tags used for matching.
+industries:
+  life_sciences:
+    name: Life Sciences
+    segments:
+      - Medical device design
+      - Pharmaceuticals
+      - Biotechnology
+    tags: [medical, pharma, biotech, FDA, life-sciences]
+
+  specialized_manufacturing:
+    name: Specialized Manufacturing
+    segments:
+      - Food, beverage, and dairy
+      - Semiconductors
+      - Heavy industry
+    tags: [food, beverage, dairy, semiconductor, heavy-industry, manufacturing]
+
+  advanced_technology:
+    name: Advanced Technology
+    segments:
+      - High-performance computing
+      - Defense
+    tags: [HPC, defense, aerospace, advanced-tech]
+
+# --- Key Differentiators ---
+# What sets Deaton apart from competitors.
+differentiators:
+  - name: Multidisciplinary Expertise
+    detail: >
+      Team of Texas-licensed Professional Engineers (PEs) across mechanical,
+      electrical, and software disciplines.
+
+  - name: Proven Track Record
+    detail: >
+      Known for ambitious, high-scale projects, such as designing the world's
+      largest vertical wind tunnel for iFLY.
+
+  - name: Customization Over Off-the-Shelf
+    detail: >
+      Specializes in creating solutions when off-the-shelf equipment cannot
+      meet a project's unique requirements.
+
+  - name: IP Security
+    detail: >
+      Strong commitment to safety and confidentiality, working under strict
+      non-disclosure agreements to protect client data and intellectual
+      property.
+
+# --- Location ---
+# Used by the geography logic email (step 9).
+location:
+  city: Austin
+  state: Texas
+  region: Gulf Coast
+  notes: >
+    Central US location with strong logistics access. On-site capability
+    for clients across the southern US and beyond.

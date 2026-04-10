@@ -1,0 +1,65 @@
+# =============================================================================
+# Case Study: TMGCore — Two-Phase Liquid Immersion Cooling Data Center
+# =============================================================================
+# Deaton's most technically complex recent project. Demonstrates ability to
+# design first-of-kind HPC infrastructure with robotics, process controls,
+# and DFM at enterprise scale.
+# =============================================================================
+
+id: tmgcore-immersion-cooling
+
+client_name: TMGCore
+client_industry: high-performance computing / data centers
+client_type: Next-generation data center solutions company
+
+project_type: concept-through-commissioning
+
+challenge: >
+  TMGCore needed to design, engineer, prototype, and create a DFM package
+  for a high-density data center platform using two-phase liquid immersion
+  cooling. The OTTO platform had to deliver unprecedented computing densities
+  beyond air-cooled limits, with fully autonomous lights-out operation,
+  robotic blade hot-swapping with zero downtime, and compatibility with
+  customer facilities running different power configurations.
+
+solution: >
+  Deaton designed the OTTO platform — the first commercial-ready,
+  enterprise-grade, two-phase liquid immersion cooling system. Supporting up
+  to 6,000 watts per blade (vs 150-200 W/SF typical air-cooled), the system
+  features advanced robotics for zero-downtime blade hot-swaps, a
+  proprietary Vapor Recovery System using pervaporative membranes, process
+  controls for pressure/temperature/fluid/humidity, and HMI for both
+  autonomous and manual operation. Deaton performed FEA on critical
+  components, conducted material compatibility research, implemented safety
+  features, and prepared DFM documentation for high-volume manufacturing.
+  Success with OTTO led to developing several additional machine lines for
+  TMGCore.
+
+results:
+  - "First commercial-ready two-phase liquid immersion cooling platform"
+  - "3,750 watts/SF power flux vs 150-200 watts/SF in air-cooled data centers"
+  - "Zero downtime with fully automated robotic blade hot-swapping"
+  - "Fully autonomous lights-out operation with remote monitoring"
+  - "Proprietary Vapor Recovery System with pervaporative membrane"
+  - "Success led to multiple additional machine line contracts"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+  - process_and_facility_engineering
+
+tags:
+  - HPC
+  - data-center
+  - immersion-cooling
+  - robotics
+  - first-of-kind
+  - advanced-tech
+  - DFM
+  - process-controls
+  - FEA
+  - autonomous
+  - IoT
+  - large-scale
+  - prototype-to-production
+  - repeat-business

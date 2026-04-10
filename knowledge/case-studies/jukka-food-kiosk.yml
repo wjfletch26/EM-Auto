@@ -1,0 +1,61 @@
+# =============================================================================
+# Case Study: JUKKA — Smart Automated Food Kiosk
+# =============================================================================
+# Demonstrates Deaton's long-term product development from concept through
+# DFM, integrating robotics, IoT, and food safety compliance.
+# =============================================================================
+
+id: jukka-food-kiosk
+
+client_name: JUKKA Inc
+client_industry: food service technology / robotics
+client_type: Smart food kiosk startup
+
+project_type: concept-through-commissioning
+
+challenge: >
+  JUKKA needed to design a smart kiosk that could store, heat, and vend a
+  variety of snacks, entrees, and desserts with an elegant form factor unlike
+  traditional vending machines. The kiosk required cashless and mobile app
+  ordering, IoT connectivity for centralized fleet management, and full USDA
+  Food Safety Code compliance. The design spanned from 2014 through 2021,
+  evolving through pre-alpha, alpha, and beta stages.
+
+solution: >
+  Deaton worked with JUKKA and world-class partners to deliver the vision
+  over 7 years. A 3-axis robotic arm served as the primary conveyance
+  system. The kiosk included custom refrigeration with software-switchable
+  temperature control, customized microwave integration, facial recognition,
+  integrated speakers and microphones, and anti-microbial COVID-19 safety
+  features. The beta unit was deployed at a semiconductor facility in Austin,
+  TX for field testing. Deaton positioned JUKKA for Design for Manufacturing
+  (DFM) with their OEM of choice through continuous improvement during the
+  field test.
+
+results:
+  - "7-year engagement from concept through beta field deployment"
+  - "3-axis robotic conveyance system for product handling"
+  - "Custom automated refrigeration with software-switchable temperature control"
+  - "Field-tested at semiconductor facility serving hundreds of employees"
+  - "DFM-ready design for OEM production"
+  - "COVID-era health safety features integrated (anti-microbial, UV sanitation)"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+
+tags:
+  - robotics
+  - food-and-beverage
+  - IoT
+  - kiosk
+  - automation
+  - USDA
+  - food-safety
+  - refrigeration
+  - DFM
+  - field-test
+  - motion-control
+  - modular-design
+  - startup
+  - long-term-partnership
