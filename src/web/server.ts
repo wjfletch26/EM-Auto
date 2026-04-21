@@ -1,5 +1,5 @@
 /**
- * Small web server for health checks and unsubscribe links.
+ * Small web server for health checks, unsubscribe links, and the operator dashboard.
  */
 import express, { type RequestHandler } from 'express';
 import type { Server } from 'node:http';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import { createRateLimiterMiddleware } from '../utils/rate-limiter.js';
+import { dashboardSummaryHandler } from './routes/dashboard-api.js';
 import { unsubscribeHandler } from './routes/unsubscribe.js';
 
 const healthHandler: RequestHandler = (_req, res) => {
@@ -21,14 +22,23 @@ const healthHandler: RequestHandler = (_req, res) => {
 export function startWebServer(port = config.unsub.port): Server {
   const app = express();
   const unsubscribeRateLimiter = createRateLimiterMiddleware();
+  // Dashboard summary hits Google Sheets several times — keep abuse away from the API quota.
+  const dashboardApiLimiter = createRateLimiterMiddleware({
+    maxRequests: 24,
+    windowMs: 60_000,
+  });
+
+  const publicRoot = path.join(process.cwd(), 'public');
 
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
+  app.get('/api/dashboard/summary', dashboardApiLimiter, dashboardSummaryHandler);
+  app.use('/dashboard', express.static(path.join(publicRoot, 'dashboard'), { index: 'index.html' }));
 
   const server = app.listen(port, () => {
     logger.info(
       { module: 'web', port },
-      'Unsubscribe server listening',
+      'Web server listening (health, unsubscribe, dashboard)',
     );
   });
 

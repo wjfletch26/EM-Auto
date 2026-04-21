@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Deaton Outreach — Pipeline Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Pipeline dashboard</h1>
+          <p class="sub">Live counts from Google Sheets — contacts, intelligence, and review queue.</p>
+        </div>
+        <div class="toolbar">
+          <span id="generated-at" class="muted"></span>
+          <button type="button" id="refresh">Refresh</button>
+        </div>
+      </header>
+
+      <p id="status" class="loading" aria-live="polite">Loading…</p>
+      <div id="error" role="alert" hidden></div>
+
+      <section class="metrics" aria-label="Summary metrics">
+        <div class="metric">
+          <span class="label">Contacts</span>
+          <span id="metric-contacts-total" class="value">—</span>
+        </div>
+        <div class="metric">
+          <span class="label">With company URL</span>
+          <span id="metric-contacts-url" class="value">—</span>
+        </div>
+        <div class="metric">
+          <span class="label">Intel rows</span>
+          <span id="metric-intel-total" class="value">—</span>
+        </div>
+        <div class="metric">
+          <span class="label">Intel errors</span>
+          <span id="metric-intel-errors" class="value">—</span>
+        </div>
+        <div class="metric">
+          <span class="label">Review queue</span>
+          <span id="metric-queue-total" class="value">—</span>
+        </div>
+      </section>
+
+      <div class="grid">
+        <article class="card">
+          <h2>Contacts — pipeline status</h2>
+          <div id="breakdown-contacts"></div>
+        </article>
+        <article class="card">
+          <h2>Company intelligence — pipeline status</h2>
+          <div id="breakdown-intel"></div>
+        </article>
+        <article class="card">
+          <h2>Review queue — status</h2>
+          <div id="breakdown-queue"></div>
+        </article>
+        <article class="card full">
+          <h2>Intelligence errors (sample)</h2>
+          <div style="overflow-x: auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contact</th>
+                  <th>Error log</th>
+                </tr>
+              </thead>
+              <tbody id="intel-errors-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+
+      <footer>
+        API: <code>/api/dashboard/summary</code> · Same port as unsubscribe ·
+        <a href="/health">Health</a>
+      </footer>
+    </div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
