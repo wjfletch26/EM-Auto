@@ -21,7 +21,8 @@
     "pipeline:run": "tsx scripts/run-pipeline.ts",
     "pipeline:status": "tsx scripts/pipeline-status.ts",
     "pipeline:test-llm": "tsx scripts/test-llm.ts",
-    "pipeline:setup-sheets": "tsx scripts/setup-sheets.ts"
+    "pipeline:setup-sheets": "tsx scripts/setup-sheets.ts",
+    "sheets:format": "tsx scripts/format-spreadsheet.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
