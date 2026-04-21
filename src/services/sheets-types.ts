@@ -194,16 +194,21 @@ export interface ReviewQueueEntry {
   generatedDate: string;
   approvedDate: string;
   campaignId: string;
+  /** Per-step instructions from David; non-empty triggers regeneration via script. */
+  daveNotes: string;
   /** 1-indexed row number in the sheet. */
   _rowIndex: number;
 }
 
 /** Fields that can be updated on a Review Queue row. */
 export interface ReviewQueueUpdate {
-  status: string;
-  reviewerNotes: string;
-  approvedDate: string;
-  campaignId: string;
+  status?: string;
+  reviewerNotes?: string;
+  approvedDate?: string;
+  campaignId?: string;
+  subject?: string;
+  body?: string;
+  daveNotes?: string;
 }
 
 /** Maps ReviewQueueUpdate fields to column letters in Review Queue tab. */
@@ -212,4 +217,7 @@ export const REVIEW_FIELD_TO_COLUMN: Record<keyof ReviewQueueUpdate, string> = {
   reviewerNotes: 'H',
   approvedDate: 'J',
   campaignId: 'K',
+  subject: 'E',
+  body: 'F',
+  daveNotes: 'L',
 };

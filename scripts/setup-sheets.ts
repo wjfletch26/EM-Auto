@@ -57,7 +57,7 @@ const TABS: Record<string, string[]> = {
   'Review Queue': [
     'contact_email', 'company_name', 'step_number', 'email_purpose',
     'subject', 'body', 'status', 'reviewer_notes',
-    'generated_date', 'approved_date', 'campaign_id',
+    'generated_date', 'approved_date', 'campaign_id', 'dave_notes',
   ],
 };
 

@@ -393,7 +393,7 @@ export async function updateCompanyIntelligence(
 export async function getReviewQueue(): Promise<ReviewQueueEntry[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Review Queue'!A2:K" })
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Review Queue'!A2:L" })
   );
 
   const rows = res.data.values || [];
@@ -409,6 +409,7 @@ export async function getReviewQueue(): Promise<ReviewQueueEntry[]> {
     generatedDate: row[8] || '',
     approvedDate: row[9] || '',
     campaignId: row[10] || '',
+    daveNotes: row[11] || '',
     _rowIndex: i + 2,
   }));
 }
@@ -419,13 +420,13 @@ export async function appendReviewQueueBatch(entries: Omit<ReviewQueueEntry, '_r
   const values = entries.map((e) => [
     e.contactEmail, e.companyName, e.stepNumber, e.emailPurpose,
     e.subject, e.body, e.status, e.reviewerNotes,
-    e.generatedDate, e.approvedDate, e.campaignId,
+    e.generatedDate, e.approvedDate, e.campaignId, e.daveNotes ?? '',
   ]);
 
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Review Queue'!A:K",
+      range: "'Review Queue'!A:L",
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values },
@@ -444,6 +445,7 @@ export async function updateReviewQueueEntry(
   const data: sheets_v4.Schema$ValueRange[] = [];
 
   for (const [field, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
     const col = REVIEW_FIELD_TO_COLUMN[field as keyof ReviewQueueUpdate];
     if (!col) continue;
     data.push({ range: `'Review Queue'!${col}${rowIndex}`, values: [[value]] });

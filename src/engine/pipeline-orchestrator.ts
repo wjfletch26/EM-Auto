@@ -17,7 +17,8 @@ import { researchCompany, type CompanyProfile } from '../skills/company-research
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
 import { generateEmailSequence } from '../skills/email-generator.js';
 import { reviewEmailQuality } from '../skills/quality-reviewer.js';
-import { loadPersona } from '../skills/knowledge-loader.js';
+import { loadPersona, loadEmailStructure } from '../skills/knowledge-loader.js';
+import { runHardEmailQC, mergeHardQCIntoReview } from './email-hard-qc.js';
 import type { Contact, CompanyIntelligence } from '../services/sheets-types.js';
 
 // ─── Mutex ───────────────────────────────────────────────────────────────────
@@ -245,10 +246,30 @@ async function processEmailGeneration(
       intel.davidProjectNotes,
     );
 
-    // Quality review
+    // Deterministic hard QC (dashes, case-study allowlist, David's notes anchor)
+    const allowlistedCaseStudyIds = intel.caseStudiesSelected
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const hardQc = runHardEmailQC({
+      emails: emailSequence.emails.map((e) => ({
+        step: e.step,
+        subject: e.subject,
+        body: e.body,
+      })),
+      allowlistedCaseStudyIds,
+      davidProjectNotes: intel.davidProjectNotes,
+    });
+
+    // LLM quality review (with alignment + notes + structure for stricter checks)
     logger.info(log, 'Running quality review');
     const persona = loadPersona(contact.title);
-    const qcResult = await reviewEmailQuality(llm, profile, emailSequence, persona);
+    let qcResult = await reviewEmailQuality(llm, profile, emailSequence, persona, {
+      alignmentJson: JSON.stringify(alignment, null, 2),
+      davidProjectNotes: intel.davidProjectNotes || '(none)',
+      emailStructure: loadEmailStructure(),
+    });
+    qcResult = mergeHardQCIntoReview(qcResult, hardQc);
 
     // Write emails to Review Queue
     const now = new Date().toISOString();
@@ -271,6 +292,7 @@ async function processEmailGeneration(
         generatedDate: now,
         approvedDate: '',
         campaignId: '',
+        daveNotes: '',
       };
     });
 

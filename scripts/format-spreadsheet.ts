@@ -61,8 +61,8 @@ const SHEET_LAYOUTS: Record<
     userBodyColumnIndices: [0, 1, 12, 14],
   },
   'Review Queue': {
-    colCount: 11,
-    userBodyColumnIndices: [6, 7, 9, 10],
+    colCount: 12,
+    userBodyColumnIndices: [6, 7, 9, 10, 11],
   },
 };
 
