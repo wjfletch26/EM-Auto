@@ -23,7 +23,8 @@
     "pipeline:test-llm": "tsx scripts/test-llm.ts",
     "pipeline:setup-sheets": "tsx scripts/setup-sheets.ts",
     "sheets:format": "tsx scripts/format-spreadsheet.ts",
-    "review:regenerate-email": "tsx scripts/regenerate-review-queue-email.ts"
+    "review:regenerate-email": "tsx scripts/regenerate-review-queue-email.ts",
+    "sheets:migrate-dave-notes": "tsx scripts/migrate-review-queue-dave-notes.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
