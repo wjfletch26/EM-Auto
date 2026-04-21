@@ -1,0 +1,49 @@
+# =============================================================================
+# Engineering Leader Persona — VP Eng, Engineering Director, Lead Engineer
+# =============================================================================
+# Engineering leaders care about technical credibility, execution quality,
+# team capacity, and whether Deaton can actually deliver on hard problems.
+# =============================================================================
+
+id: engineering-leader
+name: Engineering Leader (VP Eng, Director of Engineering, Lead Engineer)
+
+# Title patterns that match this persona
+title_patterns:
+  - VP of Engineering
+  - VP Engineering
+  - Director of Engineering
+  - Engineering Director
+  - Engineering Manager
+  - Lead Engineer
+  - Principal Engineer
+  - Staff Engineer
+  - Head of Engineering
+  - Technical Director
+  - Chief Engineer
+  - R&D Director
+  - R&D Manager
+
+messaging_angle: >
+  Lead with technical credibility and Deaton's multidisciplinary depth.
+  Show understanding of their specific engineering challenges. Position
+  Deaton as an extension of their team that can handle the hard parts.
+  Use case studies that highlight technical complexity and execution quality.
+
+priorities:
+  - Technical credibility and depth
+  - Team capacity augmentation for complex projects
+  - Quality of engineering deliverables
+  - Cross-disciplinary expertise (mechanical + electrical + software)
+  - Ability to handle first-of-their-kind challenges
+
+tone: >
+  Technical peer. Demonstrate competence through specificity. Can go deeper
+  on engineering details. Respect their expertise — don't over-explain
+  concepts they already understand.
+
+avoid:
+  - Being too high-level or business-focused
+  - Underestimating their technical knowledge
+  - Vague descriptions of Deaton's approach
+  - Overselling without technical substance

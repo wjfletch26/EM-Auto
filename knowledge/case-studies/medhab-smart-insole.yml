@@ -1,0 +1,60 @@
+# =============================================================================
+# Case Study: MedHab / RPM2 — Smart Athletic Shoe Insole
+# =============================================================================
+# Demonstrates Deaton's miniaturized electronics and wearable product
+# development, from proof of concept through production-ready design.
+# =============================================================================
+
+id: medhab-smart-insole
+
+client_name: MedHab, LLC / RPM2
+client_industry: medical device / wearable technology
+client_type: Wearable rehab and athletic performance technology company (Fort Worth, TX)
+
+project_type: product-development
+
+challenge: >
+  MedHab needed to develop a smart shoe insole system that could measure
+  body weight, force, gait, and flexibility using embedded sensors. The
+  main challenge was packaging all necessary sensors and communication
+  devices into something small enough for daily use inside a shoe. The
+  athletic insole had to withstand wear and tear while providing reliable
+  Bluetooth connection sampling data at up to 100Hz from force sensors,
+  a 3-axis accelerometer, gyroscope, and magnetometer.
+
+solution: >
+  Deaton evolved the design from an initial proof of concept (shoe-box sized,
+  9V battery powered) to a fully wireless miniaturized device with lithium
+  polymer batteries and inductive charging. The multi-layer PCB contained a
+  9-axis sensor suite, Bluetooth transceiver, induction charging circuit,
+  non-volatile memory, and low-power microcontroller — all no bigger than
+  a stick of gum. Deaton developed custom firmware for wireless mobile
+  communication and app backbone/APIs for Android and iOS, later used by
+  RPM2 for their own control apps. RPM2 became an official USA Triathlon
+  Training Footbed Partner.
+
+results:
+  - "Miniaturized from shoe-box prototype to in-sole form factor"
+  - "Fully wireless with inductive charging and Bluetooth communication"
+  - "9-axis sensor integration (accelerometer/gyro/magnetometer + force sensors)"
+  - "Android and iOS app backbone and APIs developed"
+  - "RPM2 became official USA Triathlon Training Footbed Partner"
+
+capabilities_demonstrated:
+  - product_development
+
+tags:
+  - medical-device
+  - wearable
+  - miniaturization
+  - PCB-design
+  - Bluetooth
+  - firmware
+  - mobile-app
+  - sensors
+  - IoT
+  - rehabilitation
+  - athletics
+  - low-power
+  - inductive-charging
+  - life-sciences

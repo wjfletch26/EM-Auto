@@ -1,0 +1,58 @@
+# =============================================================================
+# Case Study: Pharmaceutical Film Thickness Measurement Gauge
+# =============================================================================
+# Demonstrates Deaton's ability to design precision measurement systems
+# that meet GMP and 21 CFR Part 11 validation requirements.
+# =============================================================================
+
+id: machine-build-film-gauge
+
+client_name: Pharmaceutical Contract Formulator
+client_industry: pharmaceuticals
+client_type: Contract drug formulator (transdermal patches)
+
+project_type: concept-through-commissioning
+
+challenge: >
+  A contract formulator needed a laser measurement gauge for continuous,
+  real-time thickness measurements of thin film polymer extrusions used in
+  transdermal drug patches. Tolerances were extremely narrow since timed
+  release of the drug depends on patch thickness and surface area. The
+  high production rate required multiple simultaneous measurements across
+  the film. The machine had to be designed for GMP validation and the
+  control system had to meet 21 CFR Part 11 requirements.
+
+solution: >
+  Deaton developed specifications for function, operation, installation, and
+  acceptance testing, then designed a system using 5 laser displacement
+  sensor pairs controlled by a PC. The system was proven against an
+  application test plan, constructed as a turn-key solution, integrated into
+  the customer's process, and calibrated on-site. The validation team created
+  functional specifications ensuring critical functions could be validated
+  per GMP requirements. Protocols challenged the system against the
+  specification, and results were presented in an FDA-audit-ready report.
+
+results:
+  - "Novel film thickness measurement technique successfully developed and proven"
+  - "Design for validation enabled smooth and efficient validation process"
+  - "21 CFR Part 11 compliance validated for control system"
+  - "Turn-key in-line process measurement system ready for GMP application"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - validation_and_compliance
+  - product_development
+
+tags:
+  - pharma
+  - FDA
+  - 21-CFR-Part-11
+  - GMP
+  - laser-measurement
+  - precision
+  - transdermal
+  - thin-film
+  - data-acquisition
+  - process-control
+  - life-sciences
+  - turn-key

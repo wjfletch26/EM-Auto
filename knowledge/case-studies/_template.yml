@@ -1,0 +1,53 @@
+# =============================================================================
+# Case Study Template — Copy this file and fill in for each case study
+# =============================================================================
+# Naming: use a slug like "ifly-wind-tunnel.yml" or "acme-bottling-line.yml"
+#
+# Instructions:
+#   1. Copy this file: cp _template.yml my-case-study.yml
+#   2. Fill in every field. Leave "results" items blank if metrics are unknown.
+#   3. Tags should match terms from deaton-profile.yml (industries, capabilities).
+# =============================================================================
+
+# Unique identifier — use lowercase with hyphens
+id: example-project
+
+# Client info (anonymize if under NDA — use industry descriptor instead)
+client_name: Example Client
+client_industry: manufacturing
+client_type: Industrial equipment manufacturer
+
+# What type of Deaton engagement this was
+project_type: concept-through-commissioning
+# Options: concept-through-commissioning, product-development, automation-design,
+#           process-engineering, validation, low-volume-manufacturing, facility-upgrade
+
+# --- The Story ---
+
+challenge: >
+  Describe the client's problem or need in 2-4 sentences.
+  Focus on the engineering/business challenge, not Deaton's role yet.
+
+solution: >
+  Describe what Deaton did in 2-4 sentences.
+  Focus on the approach, disciplines involved, and key deliverables.
+
+results:
+  - "Quantifiable result 1 (e.g., Reduced production defect rate by 40%)"
+  - "Quantifiable result 2 (e.g., Shortened time-to-market by 3 months)"
+  - "Qualitative result (e.g., System passed FDA validation on first submission)"
+
+# --- Classification ---
+# These tags are used by the alignment skill to match case studies to targets.
+
+# Which Deaton capabilities were demonstrated (use keys from deaton-profile.yml)
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - validation_and_compliance
+
+# Free-form tags for matching (industry terms, technologies, problem types)
+tags:
+  - manufacturing
+  - automation
+  - FDA
+  - medical-device

@@ -1,0 +1,56 @@
+# =============================================================================
+# Case Study: Bat Conservation International — Ultrasonic Bat Deterrent
+# =============================================================================
+# Demonstrates Deaton's ability to design custom electronic systems for
+# unique environmental applications, from PCB design through field deployment.
+# =============================================================================
+
+id: batcon-bat-deterrent
+
+client_name: Bat Conservation International, Inc.
+client_industry: environmental conservation / renewable energy
+client_type: Non-profit wildlife conservation organization
+
+project_type: product-development
+
+challenge: >
+  BCI needed to design and build an ultrasonic deterrent system to reduce bat
+  fatalities at wind energy sites. The system had to mount on wind turbines
+  with little or no modifications, withstand harsh environments, and provide
+  adequate ultrasonic coverage (up to 100 kHz) around the turbine nacelle.
+  Previous ground-level prototypes existed but nothing suitable for turbine
+  deployment or manufacturing at scale.
+
+solution: >
+  Deaton developed a microcontroller-based PCB design with a custom amplifier
+  circuit generating white noise from 10 kHz to 100 kHz. Custom enclosures
+  housed 16 ultrasonic transducers each and withstood harsh weather while
+  maintaining pressure equalization. A mechanical mounting system utilized
+  existing nacelle features to secure 8 deterrent units. Deaton designed a
+  300 VDC regulating power supply and manufactured and installed systems on
+  10 turbines in Pennsylvania, with units also shipped to the UK and Hawaii.
+  A next-generation system added adjustable waveforms and remote monitoring.
+
+results:
+  - "Manufactured and deployed on 10 wind turbines for field testing"
+  - "Systems shipped internationally (UK, Hawaii) with encouraging results"
+  - "Power and signal distribution for 128 ultrasonic transducers per turbine"
+  - "No nacelle modifications required for installation"
+  - "Next-gen design with remote control and monitoring capabilities"
+
+capabilities_demonstrated:
+  - product_development
+  - machine_and_automation_design
+
+tags:
+  - electronics
+  - PCB-design
+  - firmware
+  - ultrasonic
+  - wind-energy
+  - renewable-energy
+  - environmental
+  - custom-enclosure
+  - field-deployment
+  - microcontroller
+  - power-supply-design

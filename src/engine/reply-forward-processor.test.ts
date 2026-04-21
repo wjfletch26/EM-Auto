@@ -27,6 +27,8 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     custom1: '',
     custom2: '',
     notes: '',
+    companyUrl: '',
+    pipelineStatus: '',
     _rowIndex: 2,
     ...overrides,
   };

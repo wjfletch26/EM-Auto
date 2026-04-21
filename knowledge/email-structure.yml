@@ -1,0 +1,175 @@
+# =============================================================================
+# 12-Email Sequence Structure
+# =============================================================================
+# Defines the arc of a full outreach sequence. Each step has a specific
+# purpose, tone, content focus, CTA, and length guidance.
+#
+# The email generator skill reads this file and uses it to shape each email
+# in the sequence. Emails are persona-adapted but follow this structural arc.
+# =============================================================================
+
+sequence_name: Deaton Standard 12-Touch Sequence
+
+# Global rules that apply to every email in the sequence
+global_rules:
+  - Every email must include a personalized element tied to the company profile or signals.
+  - Never repeat the same proof point in consecutive emails.
+  - Subject lines must be under 60 characters and avoid spam trigger words.
+  - Each email should stand alone — assume the recipient has not read prior emails.
+  - Always include the physical address and unsubscribe link (handled by send engine).
+  - Never make claims that are not supported by the company profile, signals, or case studies.
+
+steps:
+  - step: 1
+    purpose: Introduction
+    description: >
+      First touch. Establish who Deaton is and why you are reaching out to this
+      specific company. Light reference to something relevant about them. No hard
+      sell. Goal is to open the door.
+    tone: conversational, warm, professional
+    content_focus: >
+      Who Deaton is (one sentence). Why this company caught your attention
+      (reference a signal or company attribute). Brief value proposition.
+    cta: Soft — "Would you be open to a quick conversation?"
+    length_guidance: 80-120 words
+
+  - step: 2
+    purpose: Deeper relevance + strong signals
+    description: >
+      Build on the introduction by showing you understand their business.
+      Reference specific signals (hiring, funding, product launches, expansion).
+      Connect those signals to why Deaton's capabilities are timely.
+    tone: informed, specific, slightly more direct
+    content_focus: >
+      Specific business signals. Why those signals suggest timing is right.
+      Bridge from their situation to Deaton's relevance.
+    cta: Moderate — "Happy to share how we've approached this."
+    length_guidance: 100-140 words
+
+  - step: 3
+    purpose: Proof + strong signals
+    description: >
+      Introduce a case study or proof point that directly relates to their
+      situation. Make the connection explicit. This email builds credibility
+      through demonstrated results.
+    tone: confident, evidence-based
+    content_focus: >
+      One relevant case study. Specific results achieved. How it parallels
+      their situation.
+    cta: Moderate — "I can walk you through how we did this."
+    length_guidance: 100-150 words
+
+  - step: 4
+    purpose: Execution gap
+    description: >
+      Name a challenge they are likely facing based on their profile and
+      industry. Position Deaton as having solved this before. This email
+      shows you understand their world.
+    tone: empathetic, knowledgeable
+    content_focus: >
+      A specific, high-probability challenge (based on profile/industry).
+      How Deaton has addressed it for similar companies. The cost of not
+      solving it.
+    cta: Direct — "Is this something your team is dealing with?"
+    length_guidance: 100-140 words
+
+  - step: 5
+    purpose: Speed
+    description: >
+      Emphasize Deaton's ability to accelerate timelines. Many prospects are
+      under time pressure. This email positions Deaton as a way to move faster
+      without cutting corners.
+    tone: urgent but not pushy, confident
+    content_focus: >
+      Deaton's speed advantage. How the phased approach compresses timelines.
+      Example of fast delivery from a case study if available.
+    cta: Direct — "If timeline is a factor, let's talk."
+    length_guidance: 80-120 words
+
+  - step: 6
+    purpose: Hypothesis / pattern interrupt
+    description: >
+      Break the pattern of previous emails with a bold or surprising angle.
+      Offer a hypothesis about their business that shows deep thinking. This
+      email re-engages prospects who may have gone cold.
+    tone: bold, thoughtful, slightly provocative
+    content_focus: >
+      A hypothesis about their business challenge or opportunity. A
+      non-obvious insight. Something that makes them think.
+    cta: Soft — "Am I reading this right?"
+    length_guidance: 60-100 words
+
+  - step: 7
+    purpose: DFM / production
+    description: >
+      Focus on design-for-manufacturing or production readiness. Many companies
+      struggle with the transition from prototype to production. Deaton excels
+      here.
+    tone: practical, authoritative
+    content_focus: >
+      Design-for-manufacturing expertise. Prototype-to-production challenges.
+      How Deaton's low-volume manufacturing capability bridges the gap.
+    cta: Moderate — "We help teams get from prototype to production."
+    length_guidance: 100-140 words
+
+  - step: 8
+    purpose: Validation
+    description: >
+      Highlight Deaton's validation and compliance expertise. Relevant for any
+      company in a regulated industry. Testing, certification, documentation.
+    tone: authoritative, reassuring
+    content_focus: >
+      Validation and compliance capabilities. Regulatory expertise (FDA, USDA,
+      EPA). How proper validation de-risks product launch.
+    cta: Moderate — "We can take the validation burden off your plate."
+    length_guidance: 100-140 words
+
+  - step: 9
+    purpose: Geography logic
+    description: >
+      Emphasize Deaton's Houston location and regional advantages. On-site
+      capability, logistics access, central US timezone. Relevant when
+      proximity matters.
+    tone: practical, relatable
+    content_focus: >
+      Houston location. On-site capability. Travel/logistics advantages.
+      Why working with a Texas-based firm is an advantage for them.
+    cta: Soft — "If local matters, we're right here."
+    length_guidance: 80-120 words
+
+  - step: 10
+    purpose: Proof stack
+    description: >
+      Combine multiple proof points for cumulative credibility. Reference
+      2-3 different capabilities or case studies. This email is a summary
+      of why Deaton is the right partner.
+    tone: confident, comprehensive
+    content_focus: >
+      Multiple proof points stacked together. Cross-disciplinary expertise.
+      Range of successful engagements. Cumulative credibility.
+    cta: Direct — "Let me know if any of this resonates."
+    length_guidance: 120-160 words
+
+  - step: 11
+    purpose: Close
+    description: >
+      Direct ask. Summarize the core value proposition in 2-3 sentences.
+      Make it easy to say yes. This is the penultimate touch.
+    tone: direct, concise, confident
+    content_focus: >
+      One clear value statement. One clear ask. Remove friction.
+    cta: Direct — "Can we set up 15 minutes this week?"
+    length_guidance: 60-90 words
+
+  - step: 12
+    purpose: Breakup
+    description: >
+      Final touch. Graciously close the sequence. Acknowledge that timing
+      may not be right. Leave the door open for future engagement. No
+      pressure.
+    tone: gracious, professional, no pressure
+    content_focus: >
+      Acknowledge this may not be the right time. Offer to stay in touch.
+      Make it easy to re-engage later. End on a positive note.
+    cta: None / soft — "If things change, I'm here."
+    length_guidance: 50-80 words

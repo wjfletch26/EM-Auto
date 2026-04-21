@@ -1,0 +1,55 @@
+# =============================================================================
+# Case Study: Briggo — Automated Coffee Kiosk
+# =============================================================================
+# Demonstrates Deaton's ability to iterate from lab prototype through
+# fully-automated commercial product with robotics and software integration.
+# =============================================================================
+
+id: briggo-coffee-kiosk
+
+client_name: Briggo, Inc.
+client_industry: food and beverage / robotics
+client_type: Automated coffee kiosk startup (Austin, TX)
+
+project_type: concept-through-commissioning
+
+challenge: >
+  Briggo needed to transform their vision of a robotic coffee kiosk into a
+  real product, progressing from a primitive lab unit to a semi-automated
+  kiosk to a fully-automated commercial product. The kiosk had to replicate
+  elite barista technique with robotic precision and repeatability, while
+  integrating with industrial design, middleware, and mobile applications
+  being developed simultaneously.
+
+solution: >
+  Deaton completed a functioning lab unit in 2010, followed by a
+  semi-automated kiosk installed at the University of Texas in 2011. The
+  fully-automated Briggo Coffee Haus replaced it in 2013, featuring more
+  drink options, significantly reduced footprint, enhanced motion control,
+  parallel processing, and modular design. After installation, Deaton
+  assisted Briggo with transitioning further design and maintenance to their
+  in-house team.
+
+results:
+  - "Delivered functioning lab unit, semi-automated kiosk, and fully-automated Coffee Haus"
+  - "Multi-axis motion control with precise motion profiles"
+  - "Seamless middleware and mobile application integration"
+  - "Modular design enabling reduced footprint and parallel processing"
+  - "Successfully transitioned manufacturing to client's in-house team"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+
+tags:
+  - robotics
+  - food-and-beverage
+  - motion-control
+  - kiosk
+  - automation
+  - software-development
+  - control-systems
+  - safety-compliance
+  - modular-design
+  - startup
+  - prototype-to-production

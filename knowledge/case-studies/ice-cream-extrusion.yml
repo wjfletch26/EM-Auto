@@ -1,0 +1,56 @@
+# =============================================================================
+# Case Study: Ice Cream Novelty Products — Custom Extrusion Equipment
+# =============================================================================
+# Demonstrates Deaton's expertise in food-grade equipment design with
+# sanitary compliance and parametric modeling for production lines.
+# =============================================================================
+
+id: ice-cream-extrusion
+
+client_name: Ice Cream Novelty Manufacturer
+client_industry: food and beverage
+client_type: Commercial ice cream and frozen novelty producer
+
+project_type: machine_and_automation_design
+
+challenge: >
+  An ice cream manufacturer needed custom extrusion equipment for novelty
+  product production, including stick slices, slices, sandwiches, cups, cones,
+  and bars. They needed equipment that could turn 2D cartoon character designs
+  into 3D designs suitable for extrusion, handle both new and existing
+  product lines, and meet strict sanitary design requirements for food
+  production.
+
+solution: >
+  Deaton designed and fabricated horizontal and vertical ice cream and water
+  ice extruders and nozzles using parametric models to ensure they met
+  delivery and production requirements. Equipment included single-flavor,
+  multi-flavor, and complex multi-output extruders, plus product handling
+  equipment (stick grippers, pickup devices), wafer and candy dispensers,
+  conveyors, and chocolate coating/enrobing modifications. Deaton also
+  provided PLC programming, automation, sanitary redesigns, cooling tunnel
+  modifications, and EPA-mandated Risk Management Plans for ammonia
+  refrigeration systems.
+
+results:
+  - "Custom extruder designs working on first installation"
+  - "Full range of product types supported: sticks, slices, sandwiches, cups, cones, bars"
+  - "Sanitary design meeting food production standards"
+  - "EPA Risk Management Plan for ammonia refrigeration compliance"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - process_and_facility_engineering
+  - validation_and_compliance
+
+tags:
+  - food-and-beverage
+  - sanitary-design
+  - extrusion
+  - PLC
+  - automation
+  - EPA
+  - ammonia-refrigeration
+  - parametric-modeling
+  - custom-equipment
+  - manufacturing

@@ -1,0 +1,53 @@
+# =============================================================================
+# Executive Persona — C-suite, VP, Director-level contacts
+# =============================================================================
+# Executives care about strategic outcomes, risk, speed, and cost. They
+# don't need technical depth — they need confidence that the problem will
+# be solved correctly and on time.
+# =============================================================================
+
+id: executive
+name: Executive (C-suite, VP, Director)
+
+# Title patterns that match this persona (used for auto-classification)
+title_patterns:
+  - CEO
+  - CTO
+  - COO
+  - CFO
+  - President
+  - Vice President
+  - VP
+  - Director
+  - Chief
+  - SVP
+  - EVP
+  - General Manager
+  - Managing Director
+  - Owner
+  - Founder
+
+messaging_angle: >
+  Lead with strategic impact and risk reduction. Position Deaton as a
+  force multiplier that extends their team's capacity without permanent
+  overhead. Emphasize speed-to-outcome, proven track record on ambitious
+  projects, and IP protection. Use case studies that highlight scale and
+  business results, not technical specifics.
+
+priorities:
+  - Strategic risk reduction
+  - Speed to market / speed to revenue
+  - Capital efficiency (extend team without hiring)
+  - Confidence in vendor execution
+  - IP and confidentiality protection
+
+tone: >
+  Concise and direct. Respect their time — short paragraphs, clear asks.
+  Peer-level language. Business outcomes over technical details. Show you
+  understand their business context.
+
+avoid:
+  - Long emails or dense paragraphs
+  - Technical jargon without business context
+  - Appearing like a commodity vendor
+  - Generic outreach that could apply to anyone

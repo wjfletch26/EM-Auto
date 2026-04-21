@@ -76,6 +76,24 @@ const loggingSchema = z.object({
   retentionDays: z.coerce.number().int().positive().default(30),
 });
 
+// --- Intelligence pipeline LLM settings ---
+const pipelineSchema = z.object({
+  enabled: envBoolean.default(false),
+  cron: z.string().default('*/5 * * * *'),
+});
+
+const perplexitySchema = z.object({
+  apiKey: z.string().optional().default(''),
+  model: z.string().optional().default('sonar'),
+});
+
+const llmSchema = z.object({
+  provider: z.string().optional().default('perplexity'),
+  apiKey: z.string().optional().default(''),
+  model: z.string().optional().default('sonar'),
+  baseUrl: z.string().url().optional().default('https://api.perplexity.ai'),
+});
+
 // --- App-level settings ---
 const appSchema = z.object({
   nodeEnv: z.enum(['development', 'production']).default('production'),
@@ -94,6 +112,9 @@ export const configSchema = z.object({
   schedule: scheduleSchema,
   logging: loggingSchema,
   app: appSchema,
+  pipeline: pipelineSchema,
+  perplexity: perplexitySchema,
+  llm: llmSchema,
 });
 
 /** TypeScript type inferred from the schema — used throughout the codebase. */

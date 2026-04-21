@@ -1,0 +1,53 @@
+# =============================================================================
+# Case Study: Dell — Automated Cooling Fan Test Fixture
+# =============================================================================
+# Demonstrates Deaton's test engineering capability for high-volume
+# simultaneous component testing with custom data acquisition.
+# =============================================================================
+
+id: dell-fan-tester
+
+client_name: Dell (via TyRex)
+client_industry: computer hardware / electronics
+client_type: Global computer systems manufacturer
+
+project_type: automation-design
+
+challenge: >
+  Dell and TyRex needed an automated fixture capable of simultaneously
+  controlling and testing up to 450 cooling fans during qualification of new
+  fan models. The system required independent control and monitoring of fan
+  speed and input power for each fan, the ability to recognize and disable
+  failed fans during testing, and flexible mounting to accommodate fans from
+  50mm to 92mm in diameter.
+
+solution: >
+  Deaton designed custom circuit boards, fan mounts, power management, and
+  cable assemblies to create the test fixture, integrated with a standard
+  thermal test chamber. Performance testing included continuous power cycling
+  at 70C for one week, with parametric testing cycling fans through their
+  speed range while independently monitoring speed and power. The first
+  article was built, installed, and verified. Complete documentation was
+  transferred to TyRex for deployment with Dell components at Asian
+  manufacturing facilities.
+
+results:
+  - "Simultaneously tested 450 fans with independent control and monitoring"
+  - "Custom adjustable mounting accommodated multiple fan sizes without affecting airflow"
+  - "7-week continuous test cycle with full parametric data acquisition"
+  - "Complete transfer documentation package for Asian manufacturer deployment"
+
+capabilities_demonstrated:
+  - machine_and_automation_design
+  - product_development
+
+tags:
+  - test-engineering
+  - data-acquisition
+  - electronics
+  - circuit-board-design
+  - thermal-testing
+  - quality-assurance
+  - computer-hardware
+  - high-volume-testing
+  - custom-fixtures

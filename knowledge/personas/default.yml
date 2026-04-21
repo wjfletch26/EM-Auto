@@ -1,0 +1,40 @@
+# =============================================================================
+# Default Persona — Used when contact role doesn't match a specific persona
+# =============================================================================
+# Balanced messaging approach suitable for any decision-maker at a target
+# company. Emphasizes business outcomes, engineering credibility, and
+# partnership language.
+# =============================================================================
+
+id: default
+name: Default / General Decision-Maker
+
+# Title patterns that match this persona (fallback — matches everything)
+title_patterns: []
+
+# How to address this persona's priorities in messaging
+messaging_angle: >
+  Lead with business outcomes and engineering credibility. Emphasize Deaton's
+  ability to de-risk complex projects and accelerate timelines. Use proof
+  points that demonstrate measurable results. Avoid overly technical jargon
+  unless the company context suggests a technical audience.
+
+# What matters most to this persona
+priorities:
+  - Reducing project risk
+  - Accelerating time-to-market
+  - Accessing specialized expertise without permanent headcount
+  - Confidence in execution quality
+
+# Tone guidance for email generation
+tone: >
+  Professional but approachable. Confident without being aggressive.
+  Peer-to-peer — not vendor-to-buyer. Assumes the recipient is competent
+  and busy.
+
+# What to avoid in messaging for this persona
+avoid:
+  - Overly salesy language or hype
+  - Vague claims without supporting evidence
+  - Assuming the recipient has a specific problem without signal support
+  - Name-dropping without relevance

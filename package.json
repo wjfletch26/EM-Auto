@@ -17,7 +17,12 @@
     "test:integration": "tsx scripts/test-integration.ts",
     "test:unsub-web": "tsx scripts/test-unsubscribe-web.ts",
     "test:reply-forward-pause": "tsx scripts/test-reply-forward-pause.ts",
-    "queue:reply-forward": "tsx scripts/queue-forwarded-reply.ts"
+    "queue:reply-forward": "tsx scripts/queue-forwarded-reply.ts",
+    "pipeline:run": "tsx scripts/run-pipeline.ts",
+    "pipeline:status": "tsx scripts/pipeline-status.ts",
+    "pipeline:test-llm": "tsx scripts/test-llm.ts",
+    "pipeline:setup-sheets": "tsx scripts/setup-sheets.ts",
+    "sheets:format": "tsx scripts/format-spreadsheet.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
@@ -28,6 +33,7 @@
     "mailparser": "^3.7.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^8.0.2",
+    "openai": "^6.33.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "zod": "^3.24.0"
