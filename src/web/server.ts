@@ -15,6 +15,11 @@ const healthHandler: RequestHandler = (_req, res) => {
   res.status(200).json({ status: 'ok' });
 };
 
+/** Root URL is used by operators in the browser — send them to the dashboard. */
+const rootHandler: RequestHandler = (_req, res) => {
+  res.redirect(302, '/dashboard/');
+};
+
 /**
  * Starts the unsubscribe web server.
  * Phase 5 can import and call this from the main entrypoint.
@@ -30,6 +35,7 @@ export function startWebServer(port = config.unsub.port): Server {
 
   const publicRoot = path.join(process.cwd(), 'public');
 
+  app.get('/', rootHandler);
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.get('/api/dashboard/summary', dashboardApiLimiter, dashboardSummaryHandler);
