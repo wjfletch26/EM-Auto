@@ -11,71 +11,149 @@
       <header>
         <div>
           <h1>Pipeline dashboard</h1>
-          <p class="sub">Live counts from Google Sheets — contacts, intelligence, and review queue.</p>
+          <p class="sub">Overview is public; operator edits require <code>DASHBOARD_SECRET</code> in <code>.env</code> and the token below.</p>
         </div>
         <div class="toolbar">
           <span id="generated-at" class="muted"></span>
-          <button type="button" id="refresh">Refresh</button>
+          <button type="button" id="refresh-overview">Refresh overview</button>
         </div>
       </header>
 
-      <p id="status" class="loading" aria-live="polite">Loading…</p>
+      <section class="token-bar card" aria-label="Dashboard authentication">
+        <h2 class="token-bar-title">Operator token</h2>
+        <p class="muted small">
+          Set <code>DASHBOARD_SECRET</code> on the server, restart, then paste the same value here. It is kept in
+          <code>sessionStorage</code> for this browser tab only.
+        </p>
+        <div class="token-row">
+          <input type="password" id="dashboard-token" autocomplete="off" placeholder="X-Dashboard-Token value" />
+          <button type="button" id="save-token">Save token</button>
+          <button type="button" id="clear-token" class="ghost">Clear</button>
+        </div>
+        <p id="token-status" class="muted small" aria-live="polite"></p>
+      </section>
+
+      <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" class="tab active" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+        <button type="button" class="tab" role="tab" data-tab="queue">Review queue</button>
+        <button type="button" class="tab" role="tab" data-tab="contacts">Contacts</button>
+        <button type="button" class="tab" role="tab" data-tab="intel">Intelligence</button>
+        <button type="button" class="tab" role="tab" data-tab="tools">Pipeline tools</button>
+      </nav>
+
+      <p id="status" class="loading" aria-live="polite"></p>
       <div id="error" role="alert" hidden></div>
 
-      <section class="metrics" aria-label="Summary metrics">
-        <div class="metric">
-          <span class="label">Contacts</span>
-          <span id="metric-contacts-total" class="value">—</span>
-        </div>
-        <div class="metric">
-          <span class="label">With company URL</span>
-          <span id="metric-contacts-url" class="value">—</span>
-        </div>
-        <div class="metric">
-          <span class="label">Intel rows</span>
-          <span id="metric-intel-total" class="value">—</span>
-        </div>
-        <div class="metric">
-          <span class="label">Intel errors</span>
-          <span id="metric-intel-errors" class="value">—</span>
-        </div>
-        <div class="metric">
-          <span class="label">Review queue</span>
-          <span id="metric-queue-total" class="value">—</span>
+      <section id="panel-overview" class="tab-panel" data-panel="overview">
+        <section class="metrics" aria-label="Summary metrics">
+          <div class="metric">
+            <span class="label">Contacts</span>
+            <span id="metric-contacts-total" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">With company URL</span>
+            <span id="metric-contacts-url" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Intel rows</span>
+            <span id="metric-intel-total" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Intel errors</span>
+            <span id="metric-intel-errors" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Review queue</span>
+            <span id="metric-queue-total" class="value">—</span>
+          </div>
+        </section>
+
+        <div class="grid">
+          <article class="card">
+            <h2>Contacts — pipeline status</h2>
+            <div id="breakdown-contacts"></div>
+          </article>
+          <article class="card">
+            <h2>Company intelligence — pipeline status</h2>
+            <div id="breakdown-intel"></div>
+          </article>
+          <article class="card">
+            <h2>Review queue — status</h2>
+            <div id="breakdown-queue"></div>
+          </article>
+          <article class="card full">
+            <h2>Intelligence errors (sample)</h2>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contact</th>
+                    <th>Error log</th>
+                  </tr>
+                </thead>
+                <tbody id="intel-errors-body"></tbody>
+              </table>
+            </div>
+          </article>
         </div>
       </section>
 
-      <div class="grid">
+      <section id="panel-queue" class="tab-panel hidden" data-panel="queue">
+        <div class="panel-head">
+          <h2>Review queue</h2>
+          <button type="button" id="reload-queue" class="ghost">Reload table</button>
+        </div>
+        <p class="muted small">Row numbers are Google Sheet rows (<code>_rowIndex</code>). Edits call the Sheets API immediately.</p>
+        <div id="queue-mount" class="table-scroll"></div>
+      </section>
+
+      <section id="panel-contacts" class="tab-panel hidden" data-panel="contacts">
+        <div class="panel-head">
+          <h2>Contacts</h2>
+          <button type="button" id="reload-contacts" class="ghost">Reload table</button>
+        </div>
+        <div id="contacts-mount" class="table-scroll"></div>
+      </section>
+
+      <section id="panel-intel" class="tab-panel hidden" data-panel="intel">
+        <div class="panel-head">
+          <h2>Company intelligence</h2>
+          <button type="button" id="reload-intel" class="ghost">Reload table</button>
+        </div>
+        <div id="intel-mount" class="table-scroll"></div>
+      </section>
+
+      <section id="panel-tools" class="tab-panel hidden" data-panel="tools">
         <article class="card">
-          <h2>Contacts — pipeline status</h2>
-          <div id="breakdown-contacts"></div>
-        </article>
-        <article class="card">
-          <h2>Company intelligence — pipeline status</h2>
-          <div id="breakdown-intel"></div>
-        </article>
-        <article class="card">
-          <h2>Review queue — status</h2>
-          <div id="breakdown-queue"></div>
-        </article>
-        <article class="card full">
-          <h2>Intelligence errors (sample)</h2>
-          <div style="overflow-x: auto">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Error log</th>
-                </tr>
-              </thead>
-              <tbody id="intel-errors-body"></tbody>
-            </table>
+          <h2>Run pipeline for one contact</h2>
+          <p class="muted small">
+            Same reset rules as <code>npm run pipeline:run -- email</code>. Use <strong>new</strong> to force research from
+            <code>company_url</code>, or <strong>alignment_complete</strong> to rebuild the review-queue email set from existing
+            intel.
+          </p>
+          <div class="form-row">
+            <label>Email <input type="email" id="pl-email" placeholder="person@company.com" /></label>
+            <label>Reset mode
+              <select id="pl-reset">
+                <option value="auto">auto (script defaults)</option>
+                <option value="new">new</option>
+                <option value="alignment_complete">alignment_complete</option>
+              </select>
+            </label>
+            <button type="button" id="pl-run">Run pipeline + approval watcher</button>
           </div>
+          <pre id="pl-out" class="mono out-box" hidden></pre>
         </article>
-      </div>
+        <article class="card">
+          <h2>Run full pipeline cycle</h2>
+          <p class="muted small">Processes <em>all</em> eligible contacts (same as cron), then approval watcher.</p>
+          <button type="button" id="pl-cycle">Run full cycle</button>
+          <pre id="pl-cycle-out" class="mono out-box" hidden></pre>
+        </article>
+      </section>
 
       <footer>
-        API: <code>/api/dashboard/summary</code> · Same port as unsubscribe ·
+        Public: <code>GET /api/dashboard/summary</code> · Protected: <code>/api/dashboard/*</code> with token ·
         <a href="/health">Health</a>
       </footer>
     </div>

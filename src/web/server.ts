@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import { createRateLimiterMiddleware } from '../utils/rate-limiter.js';
-import { dashboardSummaryHandler } from './routes/dashboard-api.js';
+import { createDashboardRouter } from './routes/dashboard-router.js';
 import { unsubscribeHandler } from './routes/unsubscribe.js';
 
 const healthHandler: RequestHandler = (_req, res) => {
@@ -27,18 +27,13 @@ const rootHandler: RequestHandler = (_req, res) => {
 export function startWebServer(port = config.unsub.port): Server {
   const app = express();
   const unsubscribeRateLimiter = createRateLimiterMiddleware();
-  // Dashboard summary hits Google Sheets several times — keep abuse away from the API quota.
-  const dashboardApiLimiter = createRateLimiterMiddleware({
-    maxRequests: 24,
-    windowMs: 60_000,
-  });
 
   const publicRoot = path.join(process.cwd(), 'public');
 
   app.get('/', rootHandler);
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
-  app.get('/api/dashboard/summary', dashboardApiLimiter, dashboardSummaryHandler);
+  app.use('/api/dashboard', createDashboardRouter());
   app.use('/dashboard', express.static(path.join(publicRoot, 'dashboard'), { index: 'index.html' }));
 
   const server = app.listen(port, () => {

@@ -37,6 +37,11 @@ export interface Contact {
 
 /** Fields that the engine is allowed to update on a contact row. */
 export interface ContactUpdate {
+  firstName: string;
+  lastName: string;
+  company: string;
+  title: string;
+  campaignId: string;
   status: string;
   lastStepSent: number;
   lastSendDate: string;
@@ -50,6 +55,10 @@ export interface ContactUpdate {
   bounceType: string;
   bounceDate: string;
   softBounceCount: number;
+  custom1: string;
+  custom2: string;
+  notes: string;
+  companyUrl: string;
   pipelineStatus: string;
 }
 
@@ -99,6 +108,11 @@ export interface ReplyLogEntry {
  * Used by updateContact and batchUpdateContacts to target the right cells.
  */
 export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
+  firstName: 'B',
+  lastName: 'C',
+  company: 'D',
+  title: 'E',
+  campaignId: 'F',
   status: 'G',
   lastStepSent: 'H',
   lastSendDate: 'I',
@@ -112,6 +126,10 @@ export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
   bounceType: 'Q',
   bounceDate: 'R',
   softBounceCount: 'S',
+  custom1: 'T',
+  custom2: 'U',
+  notes: 'V',
+  companyUrl: 'W',
   pipelineStatus: 'X',
 };
 
@@ -153,6 +171,8 @@ export interface CompanyIntelUpdate {
   caseStudiesSelected: string;
   alignmentRationale: string;
   confidenceScore: string;
+  /** Column M — operator / David context fed into QC and regeneration. */
+  davidProjectNotes: string;
   executiveBrief: string;
   pipelineStatus: string;
   researchedDate: string;
@@ -172,6 +192,7 @@ export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
   caseStudiesSelected: 'J',
   alignmentRationale: 'K',
   confidenceScore: 'L',
+  davidProjectNotes: 'M',
   executiveBrief: 'N',
   pipelineStatus: 'O',
   researchedDate: 'P',
