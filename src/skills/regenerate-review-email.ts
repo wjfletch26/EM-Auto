@@ -30,24 +30,77 @@ const CohesionSchema = z.object({
 
 export type OtherEmailSlice = { step: number; subject: string; body: string };
 
+export type RegenMode = 'auto_qc' | 'user_directed';
+
+interface RegenerateBaseParams {
+  companyProfile: CompanyProfile;
+  alignment: AlignmentResult;
+  contact: ContactContext;
+  personaTitle: string;
+  stepNumber: number;
+  stepPurpose: string;
+  originalEmail: { subject: string; body: string };
+  otherEmails: OtherEmailSlice[];
+  davidProjectNotes: string;
+  qcRemediation: string;
+}
+
+type RegenerateAutoQcParams = RegenerateBaseParams & {
+  regenMode: 'auto_qc';
+};
+
+type RegenerateUserDirectedParams = RegenerateBaseParams & {
+  regenMode: 'user_directed';
+  userNotes: string;
+};
+
+export type RegenerateSingleEmailParams =
+  | RegenerateAutoQcParams
+  | RegenerateUserDirectedParams;
+
+/** Runtime guardrail: auto_qc mode must never receive user notes. */
+export function validateRegenParams(params: RegenerateSingleEmailParams): void {
+  if (params.regenMode === 'auto_qc' && 'userNotes' in params) {
+    throw new Error('auto_qc regeneration cannot accept user notes');
+  }
+}
+
+/**
+ * Builds a concise remediation block from QC issues and optional suggestion.
+ * Keeps prompts focused on repair for the target step only.
+ */
+export function buildQcRemediation(
+  issues: string[],
+  suggestion?: string | null,
+): string {
+  const cappedIssues = issues.slice(0, 6).map((i) => i.trim()).filter(Boolean);
+  const issueText = cappedIssues
+    .map((i, idx) => `${idx + 1}. ${i}`)
+    .join('\n')
+    .slice(0, 800);
+  const suggestionText = (suggestion ?? '').trim().slice(0, 200);
+  const parts = [
+    issueText ? `Issues:\n${issueText}` : 'Issues: (none provided)',
+    suggestionText ? `Suggested direction: ${suggestionText}` : '',
+  ].filter(Boolean);
+  return parts.join('\n\n');
+}
+
 /**
  * Regenerates one email body+subject using David's notes and full context.
  */
 export async function regenerateSingleReviewEmail(
   provider: LLMProvider,
-  params: {
-    companyProfile: CompanyProfile;
-    alignment: AlignmentResult;
-    contact: ContactContext;
-    personaTitle: string;
-    stepNumber: number;
-    stepPurpose: string;
-    daveNotes: string;
-    otherEmails: OtherEmailSlice[];
-  },
+  params: RegenerateSingleEmailParams,
 ): Promise<{ subject: string; body: string }> {
+  validateRegenParams(params);
   const persona = loadPersona(params.personaTitle);
-  const { systemPrompt, userPrompt } = loadPrompt('review-queue-single-email', {
+  const promptName = params.regenMode === 'auto_qc'
+    ? 'review-queue-regen-auto-qc'
+    : 'review-queue-regen-user-directed';
+  const userNotes = params.regenMode === 'user_directed' ? params.userNotes : '';
+
+  const { systemPrompt, userPrompt } = loadPrompt(promptName, {
     deaton_profile: loadDeatonProfile(),
     case_studies: loadCaseStudies(),
     persona,
@@ -60,8 +113,11 @@ export async function regenerateSingleReviewEmail(
     contact_company: params.contact.company,
     step_number: String(params.stepNumber),
     step_purpose: params.stepPurpose,
+    original_email_json: JSON.stringify(params.originalEmail, null, 2),
     other_emails_json: JSON.stringify(params.otherEmails, null, 2),
-    dave_notes: params.daveNotes.trim(),
+    david_project_notes: params.davidProjectNotes.trim(),
+    qc_remediation: params.qcRemediation.trim(),
+    user_notes: userNotes.trim(),
   });
 
   const raw = await provider.complete({

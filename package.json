@@ -24,7 +24,8 @@
     "pipeline:setup-sheets": "tsx scripts/setup-sheets.ts",
     "sheets:format": "tsx scripts/format-spreadsheet.ts",
     "review:regenerate-email": "tsx scripts/regenerate-review-queue-email.ts",
-    "sheets:migrate-dave-notes": "tsx scripts/migrate-review-queue-dave-notes.ts"
+    "sheets:migrate-dave-notes": "tsx scripts/migrate-review-queue-dave-notes.ts",
+    "sheets:migrate-qc-regen-state": "tsx scripts/migrate-qc-regen-state.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

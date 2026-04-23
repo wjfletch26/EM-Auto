@@ -16,10 +16,10 @@ import { createPerplexityProvider, createLLMProvider, type LLMProvider } from '.
 import { researchCompany, type CompanyProfile } from '../skills/company-research.js';
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
 import { generateEmailSequence } from '../skills/email-generator.js';
-import { reviewEmailQuality } from '../skills/quality-reviewer.js';
-import { loadPersona, loadEmailStructure } from '../skills/knowledge-loader.js';
-import { runHardEmailQC, mergeHardQCIntoReview } from './email-hard-qc.js';
+import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
+import { runFullMergedQC } from './email-qc-runner.js';
 import type { Contact, CompanyIntelligence } from '../services/sheets-types.js';
+import type { AlignmentResult } from '../skills/deaton-alignment.js';
 
 // ─── Mutex ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ let pipelineRunning = false;
 // ─── Max retries for failed stages ───────────────────────────────────────────
 
 const MAX_RETRIES = 3;
+const MAX_AUTO_REGEN_ROUNDS = 2;
 
 // ─── Main Pipeline Cycle ─────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ async function processEmailGeneration(
     };
 
     // Reconstruct alignment from intel data
-    const alignment = {
+    const alignment: AlignmentResult = {
       relevant_capabilities: intel.deatonCapabilitiesMatched.split(', ')
         .filter(Boolean)
         .map((name) => ({ capability_key: name.toLowerCase().replace(/ /g, '_'), capability_name: name, relevance_explanation: '' })),
@@ -246,38 +247,109 @@ async function processEmailGeneration(
       intel.davidProjectNotes,
     );
 
-    // Deterministic hard QC (dashes, case-study allowlist, David's notes anchor)
     const allowlistedCaseStudyIds = intel.caseStudiesSelected
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    const hardQc = runHardEmailQC({
-      emails: emailSequence.emails.map((e) => ({
-        step: e.step,
-        subject: e.subject,
-        body: e.body,
-      })),
+    let sequence = emailSequence;
+    const regenAttemptByStep = new Map<number, number>();
+
+    let qcResult = await runFullMergedQC({
+      provider: llm,
+      companyProfile: profile,
+      sequence,
+      alignment,
+      contactTitle: contact.title,
       allowlistedCaseStudyIds,
       davidProjectNotes: intel.davidProjectNotes,
     });
 
-    // LLM quality review (with alignment + notes + structure for stricter checks)
-    logger.info(log, 'Running quality review');
-    const persona = loadPersona(contact.title);
-    let qcResult = await reviewEmailQuality(llm, profile, emailSequence, persona, {
-      alignmentJson: JSON.stringify(alignment, null, 2),
-      davidProjectNotes: intel.davidProjectNotes || '(none)',
-      emailStructure: loadEmailStructure(),
-    });
-    qcResult = mergeHardQCIntoReview(qcResult, hardQc);
+    for (let round = 1; round <= MAX_AUTO_REGEN_ROUNDS; round++) {
+      const failing = qcResult.email_reviews
+        .filter((r) => !r.pass)
+        .sort((a, b) => a.step - b.step);
+      if (failing.length === 0) break;
+
+      logger.info({ ...log, round, failingSteps: failing.map((f) => f.step) }, 'Auto QC regeneration round');
+
+      for (const failedStep of failing) {
+        const current = sequence.emails.find((e) => e.step === failedStep.step);
+        if (!current) continue;
+        const attemptNumber = (regenAttemptByStep.get(failedStep.step) ?? 0) + 1;
+        regenAttemptByStep.set(failedStep.step, attemptNumber);
+
+        const otherEmails = sequence.emails
+          .filter((e) => e.step !== failedStep.step)
+          .map((e) => ({ step: e.step, subject: e.subject, body: e.body }));
+        const qcRemediation = buildQcRemediation(failedStep.issues, failedStep.suggestion);
+        const subjectBefore = current.subject;
+        const bodyBefore = current.body;
+
+        try {
+          const rewritten = await regenerateSingleReviewEmail(llm, {
+            regenMode: 'auto_qc',
+            companyProfile: profile,
+            alignment,
+            contact: {
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+              title: contact.title,
+              company: contact.company,
+            },
+            personaTitle: contact.title,
+            stepNumber: failedStep.step,
+            stepPurpose: current.purpose,
+            originalEmail: { subject: current.subject, body: current.body },
+            otherEmails,
+            davidProjectNotes: intel.davidProjectNotes,
+            qcRemediation,
+          });
+
+          current.subject = rewritten.subject;
+          current.body = rewritten.body;
+
+          await sheets.appendQcRegenAudit({
+            timestamp: new Date().toISOString(),
+            contactEmail: contact.email,
+            stepNumber: failedStep.step,
+            attemptNumber,
+            regenMode: 'auto_qc',
+            inputSourcesUsed: JSON.stringify(['qc_remediation', 'david_project_notes', 'sequence_context']),
+            triggerReason: 'merged_qc_fail',
+            qcIssuesJson: JSON.stringify(failedStep.issues),
+            suggestionUsed: (failedStep.suggestion ?? '').slice(0, 200),
+            subjectBefore,
+            bodyBefore,
+            subjectAfter: rewritten.subject,
+            bodyAfter: rewritten.body,
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn({ ...log, step: failedStep.step, round, error: msg }, 'Auto regeneration failed for step');
+        }
+      }
+
+      qcResult = await runFullMergedQC({
+        provider: llm,
+        companyProfile: profile,
+        sequence,
+        alignment,
+        contactTitle: contact.title,
+        allowlistedCaseStudyIds,
+        davidProjectNotes: intel.davidProjectNotes,
+      });
+    }
 
     // Write emails to Review Queue
     const now = new Date().toISOString();
-    const reviewEntries = emailSequence.emails.map((email) => {
+    const failedAfterAuto = new Set(
+      qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step),
+    );
+    const reviewEntries = sequence.emails.map((email) => {
       // Annotate with QC flags if present
       const emailReview = qcResult.email_reviews.find((r) => r.step === email.step);
       const notes = emailReview && !emailReview.pass
-        ? `FLAGGED BY QC: ${emailReview.issues.join('; ')}`
+        ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
         : '';
 
       return {
@@ -293,6 +365,12 @@ async function processEmailGeneration(
         approvedDate: '',
         campaignId: '',
         daveNotes: '',
+        manualReviewRequired: failedAfterAuto.has(email.step),
+        qcAutoStatus: failedAfterAuto.has(email.step)
+          ? ('auto_exhausted' as const)
+          : ('ok' as const),
+        nextAction: failedAfterAuto.has(email.step) ? 'await_user_notes' : '',
+        regenMode: '' as const,
       };
     });
 
@@ -308,6 +386,7 @@ async function processEmailGeneration(
       `Confidence: ${alignment.confidence}`,
       `Capabilities Matched: ${intel.deatonCapabilitiesMatched}`,
       `Case Studies: ${intel.caseStudiesSelected}`,
+      failedAfterAuto.size > 0 ? `Manual Review Required Steps: ${[...failedAfterAuto].sort((a, b) => a - b).join(', ')}` : '',
       qcResult.overall_pass
         ? `QC: PASSED (${qcResult.overall_score})`
         : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,

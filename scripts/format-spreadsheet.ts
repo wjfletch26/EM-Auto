@@ -61,9 +61,10 @@ const SHEET_LAYOUTS: Record<
     userBodyColumnIndices: [0, 1, 12, 14],
   },
   'Review Queue': {
-    colCount: 12,
-    userBodyColumnIndices: [6, 7, 9, 10, 11],
+    colCount: 16,
+    userBodyColumnIndices: [6, 7, 9, 10, 11, 12, 13, 14, 15],
   },
+  'QC Regen Audit': { colCount: 13, userBodyColumnIndices: [] },
 };
 
 /** Header row: dark blue background, white bold text, wrapped and centered. */

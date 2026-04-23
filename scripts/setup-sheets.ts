@@ -58,6 +58,12 @@ const TABS: Record<string, string[]> = {
     'contact_email', 'company_name', 'step_number', 'email_purpose',
     'subject', 'body', 'status', 'reviewer_notes',
     'generated_date', 'approved_date', 'campaign_id', 'dave_notes',
+    'manual_review_required', 'qc_auto_status', 'next_action', 'regen_mode',
+  ],
+  'QC Regen Audit': [
+    'timestamp', 'contact_email', 'step_number', 'attempt_number', 'regen_mode',
+    'input_sources_used', 'trigger_reason', 'qc_issues_json', 'suggestion_used',
+    'subject_before', 'body_before', 'subject_after', 'body_after',
   ],
 };
 
