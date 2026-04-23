@@ -24,6 +24,7 @@ import {
   type PendingContact,
 } from '../state/local-store.js';
 import type { Contact, Campaign, CampaignStep, ReviewQueueEntry } from '../services/sheets-types.js';
+import { EMAIL_SIGNATURE_PLAIN } from '../constants/email-signature.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,12 +193,15 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
             updatePendingStatus(pendingContacts, i, 'failed');
             continue;
           }
-          // AI emails are plain text — wrap in simple HTML with unsub footer
-          html = `<p>${resolved.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+          // AI emails: body from Review Queue + system signature + compliance footer.
+          const bodyHtml = `<p>${resolved.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
+          const sigHtml = `<p>${EMAIL_SIGNATURE_PLAIN.replace(/\n/g, '<br>')}</p>`;
+          html = `${bodyHtml}${sigHtml}`
             + `<hr><p style="font-size:11px;color:#999;">${config.app.physicalAddress}<br>`
             + `<a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
           subject = resolved.subject;
-          text = `${resolved.body}\n\n---\n${config.app.physicalAddress}\nUnsubscribe: ${unsubscribeUrl}`;
+          const textBody = `${resolved.body}\n\n${EMAIL_SIGNATURE_PLAIN}`;
+          text = `${textBody}\n\n${config.app.physicalAddress}\nUnsubscribe: ${unsubscribeUrl}`;
         } else {
           // Template-based campaign — existing Handlebars path
           const templateSource = loadTemplate(step.templateFile);

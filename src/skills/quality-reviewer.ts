@@ -31,6 +31,13 @@ export const QualityReviewSchema = z.object({
 
 export type QualityReview = z.infer<typeof QualityReviewSchema>;
 
+/** Extra context so the reviewer can check case-study fit and David's notes. */
+export interface QualityReviewContext {
+  alignmentJson: string;
+  davidProjectNotes: string;
+  emailStructure: string;
+}
+
 // ─── Skill Entry Point ───────────────────────────────────────────────────────
 
 /**
@@ -40,6 +47,7 @@ export type QualityReview = z.infer<typeof QualityReviewSchema>;
  * @param companyProfile - The company the emails are about
  * @param emails         - The generated 12-email sequence
  * @param personaStr     - The persona YAML used for generation
+ * @param context        - Optional alignment, David's notes, and sequence structure
  * @returns Quality review with per-email assessments and flags
  */
 export async function reviewEmailQuality(
@@ -47,6 +55,7 @@ export async function reviewEmailQuality(
   companyProfile: CompanyProfile,
   emails: EmailSequence,
   personaStr: string,
+  context?: QualityReviewContext,
 ): Promise<QualityReview> {
   logger.info(
     { module: 'quality-reviewer', company: companyProfile.company_name },
@@ -59,6 +68,9 @@ export async function reviewEmailQuality(
     company_signals: JSON.stringify(companyProfile.signals, null, 2),
     emails_json: JSON.stringify(emails, null, 2),
     persona: personaStr,
+    alignment_json: context?.alignmentJson ?? '{}',
+    david_project_notes: context?.davidProjectNotes ?? '',
+    email_structure: context?.emailStructure ?? '',
   });
 
   const rawResponse = await provider.complete({

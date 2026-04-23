@@ -194,16 +194,33 @@ export interface ReviewQueueEntry {
   generatedDate: string;
   approvedDate: string;
   campaignId: string;
+  /** Per-step instructions from David; non-empty triggers regeneration via script. */
+  daveNotes: string;
+  /** Machine-readable gate: true means automatic QC exhausted and manual review is required. */
+  manualReviewRequired: boolean;
+  /** Machine-readable automatic QC state. */
+  qcAutoStatus: 'ok' | 'flagged' | 'auto_exhausted';
+  /** Machine-readable next action for operator workflows. */
+  nextAction: string;
+  /** Last regeneration source mode that touched this row. */
+  regenMode: '' | 'auto_qc' | 'user_notes' | 'david_notes' | 'mixed_manual';
   /** 1-indexed row number in the sheet. */
   _rowIndex: number;
 }
 
 /** Fields that can be updated on a Review Queue row. */
 export interface ReviewQueueUpdate {
-  status: string;
-  reviewerNotes: string;
-  approvedDate: string;
-  campaignId: string;
+  status?: string;
+  reviewerNotes?: string;
+  approvedDate?: string;
+  campaignId?: string;
+  subject?: string;
+  body?: string;
+  daveNotes?: string;
+  manualReviewRequired?: boolean;
+  qcAutoStatus?: 'ok' | 'flagged' | 'auto_exhausted';
+  nextAction?: string;
+  regenMode?: '' | 'auto_qc' | 'user_notes' | 'david_notes' | 'mixed_manual';
 }
 
 /** Maps ReviewQueueUpdate fields to column letters in Review Queue tab. */
@@ -212,4 +229,30 @@ export const REVIEW_FIELD_TO_COLUMN: Record<keyof ReviewQueueUpdate, string> = {
   reviewerNotes: 'H',
   approvedDate: 'J',
   campaignId: 'K',
+  subject: 'E',
+  body: 'F',
+  daveNotes: 'L',
+  manualReviewRequired: 'M',
+  qcAutoStatus: 'N',
+  nextAction: 'O',
+  regenMode: 'P',
 };
+
+// ─── QC Regen Audit Tab ──────────────────────────────────────────────────────
+
+/** An append-only audit row explaining one regeneration attempt. */
+export interface QcRegenAuditEntry {
+  timestamp: string;
+  contactEmail: string;
+  stepNumber: number;
+  attemptNumber: number;
+  regenMode: 'auto_qc' | 'user_notes' | 'david_notes' | 'mixed_manual';
+  inputSourcesUsed: string;
+  triggerReason: string;
+  qcIssuesJson: string;
+  suggestionUsed: string;
+  subjectBefore: string;
+  bodyBefore: string;
+  subjectAfter: string;
+  bodyAfter: string;
+}

@@ -10,6 +10,9 @@ You MUST return valid JSON matching the schema described below. Do not include a
 5. **Tone**: Does the tone match the persona and follow professional B2B standards?
 6. **Progression**: Does the sequence evolve across 12 emails without repetition?
 7. **Subject Lines**: Are they under 60 characters and free of spam triggers?
+8. **Case studies**: Only case studies listed in the alignment JSON should appear as named proof. Flag references to other named Deaton clients or invented studies.
+9. **David's project notes**: If non-empty notes are provided, at least several emails (especially proof-heavy steps) should clearly reflect them; flag if they are ignored.
+10. **Sequence plan**: Each step should match the purpose and content focus described in the email structure for that step number (intro vs proof vs breakup, etc.).
 
 JSON Schema:
 {
@@ -42,6 +45,15 @@ Review the following 12-email outreach sequence for quality.
 
 ## Persona Used:
 {{persona}}
+
+## Alignment (selected capabilities and case studies — authoritative for proof):
+{{alignment_json}}
+
+## David's Project Notes (must influence copy when non-empty):
+{{david_project_notes}}
+
+## Planned 12-Step Structure (check each email fits its step):
+{{email_structure}}
 
 Instructions:
 1. Evaluate each email against all criteria listed above.

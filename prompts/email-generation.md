@@ -12,6 +12,8 @@ You MUST return valid JSON matching the schema described below. Do not include a
 - Do not fabricate case study details. Only reference what is provided.
 - Write in plain text (no HTML tags in the body). The send engine handles formatting.
 - Do NOT include unsubscribe links or physical address — the send engine appends those.
+- Do NOT include a sign-off or signature block (names, title, phone). The send engine appends David's signature automatically.
+- Do not use em dashes (Unicode U+2014) or en dashes (U+2013) in subject or body. Use commas, periods, or ASCII hyphens. The only allowed en dash form is inside numeric ranges (e.g. 10-20 using ASCII hyphen is preferred).
 
 ## Deaton Profile:
 {{deaton_profile}}
@@ -30,8 +32,8 @@ JSON Schema:
   "emails": [
     {
       "step": 1,
-      "purpose": "string — from the email structure",
-      "subject": "string — under 60 characters",
+      "purpose": "string - from the email structure",
+      "subject": "string - under 60 characters",
       "body": "string — the full email body in plain text"
     }
   ]
