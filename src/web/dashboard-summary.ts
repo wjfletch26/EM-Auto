@@ -1,0 +1,112 @@
+/**
+ * Builds a JSON-friendly snapshot of pipeline spreadsheet state for the operator dashboard.
+ *
+ * This mirrors the CLI report in `scripts/pipeline-status.ts`, but returns structured data
+ * so the web UI can render cards and tables without duplicating counting rules in JavaScript.
+ */
+
+import type {
+  CompanyIntelligence,
+  Contact,
+  ReviewQueueEntry,
+} from '../services/sheets.js';
+
+/** One bucket of string keys → counts (pipeline statuses, review statuses, etc.). */
+export type StatusBreakdown = Record<string, number>;
+
+/** Truncated error row for the UI — avoids sending huge error strings to the browser. */
+export type IntelErrorPreview = {
+  contactEmail: string;
+  /** Short slice of `errorLog` so the table stays readable. */
+  preview: string;
+};
+
+/** Shape returned by GET /api/dashboard/summary — stable fields for the static dashboard client. */
+export type DashboardSummary = {
+  /** ISO timestamp when this snapshot was assembled on the server. */
+  generatedAt: string;
+  contacts: {
+    total: number;
+    withCompanyUrl: number;
+    pipelineStatus: StatusBreakdown;
+  };
+  companyIntelligence: {
+    total: number;
+    pipelineStatus: StatusBreakdown;
+    errorCount: number;
+    /** Up to `maxErrors` non-empty errorLog rows, newest-first by sheet order is not guaranteed. */
+    errors: IntelErrorPreview[];
+  };
+  reviewQueue: {
+    total: number;
+    status: StatusBreakdown;
+  };
+};
+
+const ERROR_PREVIEW_LEN = 160;
+const MAX_ERROR_ROWS = 12;
+
+/**
+ * Increments a count in an object — used for every status histogram in this module.
+ */
+function bump(map: StatusBreakdown, key: string): void {
+  const label = key.trim() === '' ? '(empty)' : key;
+  map[label] = (map[label] || 0) + 1;
+}
+
+/**
+ * Aggregates contacts, intelligence rows, and review-queue rows into one dashboard payload.
+ *
+ * @param contacts - All rows from the Contacts tab.
+ * @param intel - All rows from the Company Intelligence tab.
+ * @param queue - All rows from the Review Queue tab.
+ */
+export function buildDashboardSummary(
+  contacts: Contact[],
+  intel: CompanyIntelligence[],
+  queue: ReviewQueueEntry[],
+): DashboardSummary {
+  const contactPipeline: StatusBreakdown = {};
+  let withUrl = 0;
+  for (const c of contacts) {
+    bump(contactPipeline, c.pipelineStatus || '(not in pipeline)');
+    if (c.companyUrl?.trim()) withUrl += 1;
+  }
+
+  const intelPipeline: StatusBreakdown = {};
+  for (const row of intel) {
+    bump(intelPipeline, row.pipelineStatus || '(empty)');
+  }
+
+  const withErrors = intel.filter((r) => Boolean(r.errorLog?.trim()));
+  const errors: IntelErrorPreview[] = withErrors.slice(0, MAX_ERROR_ROWS).map((r) => ({
+    contactEmail: r.contactEmail,
+    preview: r.errorLog.length > ERROR_PREVIEW_LEN
+      ? `${r.errorLog.slice(0, ERROR_PREVIEW_LEN)}…`
+      : r.errorLog,
+  }));
+
+  const reviewStatus: StatusBreakdown = {};
+  for (const entry of queue) {
+    bump(reviewStatus, entry.status || '(empty)');
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    contacts: {
+      total: contacts.length,
+      withCompanyUrl: withUrl,
+      pipelineStatus: contactPipeline,
+    },
+    companyIntelligence: {
+      total: intel.length,
+      pipelineStatus: intelPipeline,
+      errorCount: withErrors.length,
+      errors,
+    },
+    reviewQueue: {
+      total: queue.length,
+      status: reviewStatus,
+    },
+  };
+}

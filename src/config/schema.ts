@@ -100,6 +100,12 @@ const appSchema = z.object({
   physicalAddress: z.string().min(1, 'PHYSICAL_ADDRESS is required for CAN-SPAM compliance'),
 });
 
+// --- Operator dashboard (mutations + list APIs that expose contact data) ---
+const dashboardSchema = z.object({
+  /** Required for protected routes — send the same value in the `X-Dashboard-Token` header. */
+  secret: z.string().optional().default(''),
+});
+
 /**
  * Top-level config schema. Each section maps to a group of env vars.
  * The config loader (src/config/index.ts) maps raw env vars into this shape.
@@ -115,6 +121,7 @@ export const configSchema = z.object({
   pipeline: pipelineSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,
+  dashboard: dashboardSchema,
 });
 
 /** TypeScript type inferred from the schema — used throughout the codebase. */
