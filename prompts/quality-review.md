@@ -10,6 +10,8 @@ You MUST return valid JSON matching the schema described below. Do not include a
 5. **Tone**: Does the tone match the persona and follow professional B2B standards?
 6. **Progression**: Does the sequence evolve across 12 emails without repetition?
 7. **Subject Lines**: Are they under 60 characters and free of spam triggers?
+8. **Sign-off hygiene**: The send system appends the real signature. Flag any email that still ends with a formal closing (Best, Sincerely, etc.), placeholder text like [Your Name], or a standalone "Deaton Engineering" signature line — those should be removed so only one signature appears when sent.
+9. **Typography**: Flag any em dash character (—) in subject or body. Generated copy must use commas, semicolons, or spaced hyphens instead.
 
 JSON Schema:
 {

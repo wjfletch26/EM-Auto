@@ -24,6 +24,9 @@ import {
   type PendingContact,
 } from '../state/local-store.js';
 import type { Contact, Campaign, CampaignStep, ReviewQueueEntry } from '../services/sheets-types.js';
+import { embedOutboundSignatureHtml } from '../content/email-signature.js';
+import { stripTrailingInformalSignoff } from '../content/body-signoff-strip.js';
+import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,12 +195,15 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
             updatePendingStatus(pendingContacts, i, 'failed');
             continue;
           }
-          // AI emails are plain text — wrap in simple HTML with unsub footer
-          html = `<p>${resolved.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+          // Drop informal closings (Best / [Your Name] / Deaton Engineering) — formal signature is injected below.
+          const bodyPlain = replaceEmDashesWithPlainHyphen(
+            stripTrailingInformalSignoff(resolved.body),
+          );
+          // AI emails are plain text — wrap in simple HTML; signature + footer added below (same as templates).
+          html = `<p>${bodyPlain.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
             + `<hr><p style="font-size:11px;color:#999;">${config.app.physicalAddress}<br>`
             + `<a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
-          subject = resolved.subject;
-          text = `${resolved.body}\n\n---\n${config.app.physicalAddress}\nUnsubscribe: ${unsubscribeUrl}`;
+          subject = replaceEmDashesWithPlainHyphen(resolved.subject);
         } else {
           // Template-based campaign — existing Handlebars path
           const templateSource = loadTemplate(step.templateFile);
@@ -220,8 +226,11 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
 
           html = Handlebars.compile(templateSource)(context);
           subject = Handlebars.compile(step.subject)(context);
-          text = stripHtml(html);
         }
+
+        // David Knieriem card + tagline on every outbound message (before CAN-SPAM hr block).
+        html = embedOutboundSignatureHtml(html);
+        text = stripHtml(html);
 
         // Update pending state to "sending"
         updatePendingStatus(pendingContacts, i, 'sending');
