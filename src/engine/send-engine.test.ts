@@ -70,4 +70,15 @@ describe('replaceGreetingLineBreak', () => {
     );
     assert.equal(out, 'Simon,\n\nDeaton Engineering helps robotics firms.');
   });
+
+  it('keeps multiple paragraphs after the greeting when splitting', () => {
+    const out = replaceGreetingLineBreak(
+      'Jason, Boom momentum intro.\n\nRole tie-in.\n\nDeaton proof.\n\nHappy to share more.',
+      'Jason',
+    );
+    assert.equal(
+      out,
+      'Jason,\n\nBoom momentum intro.\n\nRole tie-in.\n\nDeaton proof.\n\nHappy to share more.',
+    );
+  });
 });

@@ -19,6 +19,7 @@ global_rules:
   - Physical address and unsubscribe link are appended by the send engine — do not add them in the body.
   - Do not add an email sign-off block (Best, Sincerely, your name, or a standalone Deaton Engineering line); the send engine appends the formal signature.
   - Never make claims that are not supported by the company profile, signals, or case studies.
+  - Format each body with the salutation on its own line, then blank lines between paragraphs — at minimum separate opening context, personalization or bridge, Deaton value, and CTA. Avoid one dense paragraph for the entire body after the greeting.
 
 steps:
   - step: 1
