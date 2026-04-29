@@ -73,6 +73,75 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+export interface AIDraftValidationResult {
+  ok: boolean;
+  subject: string;
+  bodyPlain: string;
+  reason?: string;
+}
+
+/**
+ * Normalizes AI subject/body and enforces non-empty send-safe content.
+ */
+export function validateAndNormalizeAIDraft(
+  queueSubject: string,
+  queueBody: string,
+  fallbackStepSubject: string,
+  contactFirstName: string,
+): AIDraftValidationResult {
+  const subject = replaceEmDashesWithPlainHyphen((queueSubject || '').trim())
+    || replaceEmDashesWithPlainHyphen((fallbackStepSubject || '').trim());
+
+  if (!subject) {
+    return { ok: false, subject: '', bodyPlain: '', reason: 'blank_subject' };
+  }
+
+  const normalizedBody = replaceGreetingLineBreak(
+    (queueBody || '').trim(),
+    contactFirstName,
+  );
+  const bodyPlain = replaceEmDashesWithPlainHyphen(
+    stripTrailingInformalSignoff(normalizedBody),
+  );
+  if (!bodyPlain.trim()) {
+    return { ok: false, subject, bodyPlain: '', reason: 'blank_body' };
+  }
+
+  return { ok: true, subject, bodyPlain };
+}
+
+/**
+ * Ensures greeting is on its own line for better readability:
+ * "Thomas, rest..." -> "Thomas,\n\nrest..."
+ */
+export function replaceGreetingLineBreak(body: string, firstName: string): string {
+  const trimmedBody = body.trimStart();
+  const name = (firstName || '').trim();
+
+  // First preference: explicit contact first-name match.
+  if (name) {
+    const exactPattern = new RegExp(`^(${escapeRegex(name)}),\\s+([\\s\\S]+)$`, 'i');
+    const exactMatch = trimmedBody.match(exactPattern);
+    if (exactMatch) {
+      return `${exactMatch[1]},\n\n${exactMatch[2].trim()}`;
+    }
+  }
+
+  // Fallback: generic leading-name greeting, e.g. "Simon, ..." / "Mary Ann, ...".
+  const genericMatch = trimmedBody.match(
+    /^([A-Z][A-Za-z.'-]{1,30}(?:\s+[A-Z][A-Za-z.'-]{1,30}){0,2}),\s+([\s\S]+)$/,
+  );
+  if (genericMatch) {
+    return `${genericMatch[1]},\n\n${genericMatch[2].trim()}`;
+  }
+
+  return body;
+}
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Loads a Handlebars template file from the templates/ directory.
  * Returns null if the file doesn't exist (the campaign is skipped).
@@ -195,15 +264,34 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
             updatePendingStatus(pendingContacts, i, 'failed');
             continue;
           }
-          // Drop informal closings (Best / [Your Name] / Deaton Engineering) — formal signature is injected below.
-          const bodyPlain = replaceEmDashesWithPlainHyphen(
-            stripTrailingInformalSignoff(resolved.body),
+          const normalizedDraft = validateAndNormalizeAIDraft(
+            resolved.subject,
+            resolved.body,
+            step.subject,
+            contact.firstName,
           );
+          if (!normalizedDraft.ok) {
+            logger.error(
+              {
+                module: 'send-engine',
+                email: contact.email,
+                step: step.stepNumber,
+                reason: normalizedDraft.reason,
+              },
+              'AI email failed subject/body validation; skipping send',
+            );
+            skipped++;
+            updatePendingStatus(pendingContacts, i, 'failed');
+            continue;
+          }
+          subject = normalizedDraft.subject;
+
+          // Body is pre-cleaned by validateAndNormalizeAIDraft.
+          const bodyPlain = normalizedDraft.bodyPlain;
           // AI emails are plain text — wrap in simple HTML; signature + footer added below (same as templates).
           html = `<p>${bodyPlain.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
             + `<hr><p style="font-size:11px;color:#999;">${config.app.physicalAddress}<br>`
             + `<a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
-          subject = replaceEmDashesWithPlainHyphen(resolved.subject);
         } else {
           // Template-based campaign — existing Handlebars path
           const templateSource = loadTemplate(step.templateFile);
@@ -226,6 +314,15 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
 
           html = Handlebars.compile(templateSource)(context);
           subject = Handlebars.compile(step.subject)(context);
+          if (!subject.trim()) {
+            logger.error(
+              { module: 'send-engine', email: contact.email, step: step.stepNumber, campaignId: campaign.campaignId },
+              'Template subject rendered blank; skipping send',
+            );
+            skipped++;
+            updatePendingStatus(pendingContacts, i, 'failed');
+            continue;
+          }
         }
 
         // David Knieriem card + tagline on every outbound message (before CAN-SPAM hr block).

@@ -7,7 +7,23 @@
 /** Matches optional whitespace, em dash, optional whitespace (one punctuation unit). */
 const EM_DASH_UNIT = /\s*\u2014\s*/g;
 
-/** Replaces every em dash with a plain " - " separator without duplicating spaces. */
+/** Punctuation marks that should be followed by a space before a letter. */
+const MISSING_SENTENCE_SPACE = /([.!?])([A-Za-z])/g;
+
+/** Colons should also have a separator when followed by a letter (e.g. "track record:iFLY"). */
+const MISSING_COLON_SPACE = /(:)([A-Za-z])/g;
+
+/**
+ * Sometimes generated text merges with de-/re-/co- prefixes after cleanup
+ * (e.g. "commissioningde-risk"). Insert a word boundary before the prefix token.
+ */
+const MERGED_PREFIXED_WORD = /([a-z])((?:de|re|co)-[a-z]+)/g;
+
+/** Replaces every em dash and repairs common spacing artifacts from model output. */
 export function replaceEmDashesWithPlainHyphen(text: string): string {
-  return text.replace(EM_DASH_UNIT, ' - ');
+  return text
+    .replace(EM_DASH_UNIT, ' - ')
+    .replace(MISSING_SENTENCE_SPACE, '$1 $2')
+    .replace(MISSING_COLON_SPACE, '$1 $2')
+    .replace(MERGED_PREFIXED_WORD, '$1 $2');
 }
