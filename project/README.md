@@ -10,7 +10,7 @@ Automated email outreach system for Deaton Engineering. Sends personalized multi
 - A Microsoft 365 email account with SMTP AUTH enabled (`dave@deatonengineering.us`)
 - A Google Cloud project with Sheets API enabled and a service account key
 - A Google Spreadsheet shared with the service account (as Editor)
-- A VPS with a public IP and a domain pointed to it (for the unsubscribe endpoint)
+- A VPS with a public IP and a domain pointed to it (for the unsubscribe endpoint and optional admin UI on the same host)
 
 ### Setup
 
@@ -24,9 +24,10 @@ npm install
 
 # Copy and fill in environment variables
 cp .env.example .env
-# Edit .env with your credentials (see docs/ENVIRONMENT_VARIABLES.md)
+# Edit .env with your credentials (see docs/ENVIRONMENT_VARIABLES.md).
+# Optional: set ADMIN_API_KEY to enable /api/admin and the operator UI at /admin (see docs/SECURITY.md).
 
-# Build
+# Build (TypeScript + admin SPA → dist/admin/)
 npm run build
 
 # Create data directories

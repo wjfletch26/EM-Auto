@@ -9,6 +9,7 @@
 | SMTP credentials (email + password) | **CRITICAL** — full mailbox access | `.env` file on VPS |
 | Google service account JSON key | **HIGH** — read/write access to Sheets | File on VPS disk |
 | Unsubscribe HMAC secret | **HIGH** — prevents forged unsubscribes | `.env` file on VPS |
+| `ADMIN_API_KEY` (when set) | **CRITICAL** — full admin JSON API and SPA; can trigger sends and change Sheets | `.env` file on VPS |
 | Contact data (emails, names, companies) | **MODERATE** — PII | Google Sheets |
 | Send logs and reply logs | **MODERATE** — operational data | Google Sheets + local logs |
 | Application source code | **LOW** — no secrets in code | VPS disk, git repo |
@@ -28,6 +29,7 @@
 |---|---|---|
 | VPS SSH | Internet-facing | SSH key auth only, no password auth, fail2ban |
 | Unsubscribe HTTP endpoint | Internet-facing | Caddy reverse proxy with TLS, HMAC-signed tokens, rate limiting |
+| Admin JSON API (`/api/admin/*`) and SPA (`/admin`) | Internet-facing **when** `ADMIN_API_KEY` is set | Key required on every admin request (`Authorization: Bearer` or `X-Admin-Key`); if key unset, admin returns **503** and static UI is not mounted; use a long random secret, rotate like a password |
 | SMTP connection | Outbound only | TLS required (STARTTLS on port 587) |
 | IMAP connection | Outbound only | TLS required (port 993) |
 | Google Sheets API | Outbound only | Service account auth, HTTPS |
@@ -71,6 +73,7 @@ The `credentials/` directory is also gitignored.
 | SMTP password | Change in GoDaddy/Outlook webmail → update `.env` → restart PM2 |
 | Google service account key | Generate new key in Cloud Console → replace JSON file → restart PM2 → delete old key in Console |
 | Unsubscribe HMAC secret | Generate new secret → update `.env` → restart PM2. Note: old unsubscribe links become invalid. |
+| `ADMIN_API_KEY` | Generate a new random secret → update `.env` → `pm2 reload`. Invalidate any saved browser sessions or scripts using the old key. |
 
 ### Access Control
 
@@ -160,7 +163,7 @@ Token: base64url(payload + "." + signature)
 ```
 Allow: TCP 22 (SSH) — from operator IP only, if possible
 Allow: TCP 80 (HTTP) — Caddy (redirects to HTTPS)
-Allow: TCP 443 (HTTPS) — Caddy (unsubscribe endpoint)
+Allow: TCP 443 (HTTPS) — Caddy (unsubscribe + same-host admin UI/API if enabled)
 Deny: Everything else inbound
 ```
 
@@ -174,7 +177,7 @@ Outbound connections (all via TLS):
 
 - **SMTP**: STARTTLS on port 587 (required by Microsoft).
 - **IMAP**: Implicit TLS on port 993.
-- **Unsubscribe endpoint**: HTTPS via Caddy with automatic Let's Encrypt certificate.
+- **Unsubscribe and admin paths**: HTTPS via Caddy with automatic Let's Encrypt certificate (admin shares the same public host when proxied to the app).
 - **Google API**: HTTPS (enforced by googleapis SDK).
 
 ### No Plaintext Credentials in Transit
@@ -197,8 +200,9 @@ All connections use TLS. There are no plaintext credential transmissions.
 - SMTP password.
 - Google service account private key.
 - Unsubscribe HMAC secret.
+- `ADMIN_API_KEY` (same redaction rules as other secrets).
 - Full email body content (only snippets for reply classification).
-- HTTP request bodies (only path and status code for unsubscribe requests).
+- HTTP request bodies for the unsubscribe route (only path and status are logged at the edge). Admin routes log structured metadata (action, keys updated, counts), not full JSON payloads.
 
 ### Log Retention
 
@@ -223,5 +227,7 @@ Before going live, verify:
 - [ ] SMTP connection uses STARTTLS (verify in logs)
 - [ ] IMAP connection uses TLS (verify in logs)
 - [ ] No secrets appear in application logs (grep logs for password, key, secret)
+- [ ] If using the admin UI: `ADMIN_API_KEY` is a long random value; `.env` remains `600`; only trusted operators have the key
+- [ ] If the admin UI should not be exposed: leave `ADMIN_API_KEY` unset, or set `ADMIN_UI_ENABLED=false` and restrict network access to `/api/admin/*`
 - [ ] Email templates include an unsubscribe link and physical address
 - [ ] fail2ban is installed and configured for SSH
