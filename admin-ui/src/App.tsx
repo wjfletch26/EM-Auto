@@ -54,7 +54,8 @@ export function App(): JSX.Element {
   });
 
   const [importJson, setImportJson] = useState('[\n  { "email": "a@b.com", "firstName": "Ann" }\n]');
-  const [actionEmail, setActionEmail] = useState('');
+  /** Client-side filter on Sequence actions tab (matches email, name, or company). */
+  const [sequenceFilterEmail, setSequenceFilterEmail] = useState('');
 
   const showMsg = useCallback((type: 'ok' | 'err', text: string) => {
     setMessage({ type, text });
@@ -109,10 +110,28 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (!getStoredApiKey().trim()) return;
-    if (tab === 'contacts') void refreshContacts();
+    if (tab === 'contacts' || tab === 'actions') void refreshContacts();
     if (tab === 'intel') void refreshIntel();
     if (tab === 'review') void refreshReview();
   }, [tab, refreshContacts, refreshIntel, refreshReview]);
+
+  const sequenceContactsFiltered = useMemo(() => {
+    const q = sequenceFilterEmail.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((c) => {
+      const email = c.email.toLowerCase();
+      const first = String(c.firstName ?? '').toLowerCase();
+      const last = String(c.lastName ?? '').toLowerCase();
+      const company = String(c.company ?? '').toLowerCase();
+      return (
+        email.includes(q) ||
+        first.includes(q) ||
+        last.includes(q) ||
+        company.includes(q) ||
+        `${first} ${last}`.trim().includes(q)
+      );
+    });
+  }, [contacts, sequenceFilterEmail]);
 
   useEffect(() => {
     if (!selectedContact) {
@@ -306,22 +325,14 @@ export function App(): JSX.Element {
     }
   };
 
-  const researchAgain = async () => {
-    const email = actionEmail.trim().toLowerCase();
-    if (!email) {
-      showMsg('err', 'Enter contact email');
-      return;
-    }
-    await postAction(`/actions/contacts/${encodeURIComponent(email)}/research-again`);
+  const researchAgainForEmail = async (email: string) => {
+    await postAction(`/actions/contacts/${encodeURIComponent(email.trim().toLowerCase())}/research-again`);
+    await refreshContacts();
   };
 
-  const regenerateSequence = async () => {
-    const email = actionEmail.trim().toLowerCase();
-    if (!email) {
-      showMsg('err', 'Enter contact email');
-      return;
-    }
-    await postAction(`/actions/contacts/${encodeURIComponent(email)}/regenerate-sequence`);
+  const regenerateSequenceForEmail = async (email: string) => {
+    await postAction(`/actions/contacts/${encodeURIComponent(email.trim().toLowerCase())}/regenerate-sequence`);
+    await refreshContacts();
   };
 
   const tabButtons = useMemo(
@@ -783,45 +794,101 @@ export function App(): JSX.Element {
 
       {tab === 'actions' ? (
         <div className="panel">
-          <h2>Sequence and pipeline</h2>
-          <p style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
-            Requires <code>PIPELINE_ENABLED=true</code> for pipeline actions. Send cycle uses the same mutex as cron
-            (409 if busy).
+          <h2>Sequence actions</h2>
+          <p style={{ fontSize: '0.85rem', color: '#9aa0a6', marginTop: 0 }}>
+            Filter contacts below, then use <strong>Research again</strong> or <strong>Regenerate sequence</strong> per
+            row. Pipeline actions need <code>PIPELINE_ENABLED=true</code> on the server. Send cycle returns 409 if a run
+            is already in progress.
           </p>
-          <div className="row-actions">
+          <div className="row-actions" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <label>
+              Search (email, name, or company)
+              <input
+                type="text"
+                value={sequenceFilterEmail}
+                onChange={(e) => setSequenceFilterEmail(e.target.value)}
+                placeholder="leave empty to show all contacts"
+              />
+            </label>
+            <button type="button" className="secondary" disabled={loading} onClick={() => void refreshContacts()}>
+              Refresh
+            </button>
+          </div>
+          <p style={{ fontSize: '0.8rem', color: '#9aa0a6', margin: '0.75rem 0' }}>
+            Global runs (all contacts / queue):
+          </p>
+          <div className="row-actions" style={{ marginBottom: '1rem' }}>
             <button type="button" className="primary" disabled={loading} onClick={() => void postAction('/actions/send-cycle')}>
-              Run send cycle now
+              Run send cycle
             </button>
             <button type="button" className="secondary" disabled={loading} onClick={() => void postAction('/actions/pipeline-cycle')}>
               Run pipeline cycle
             </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={loading}
-              onClick={() => void postAction('/actions/approval-watcher')}
-            >
+            <button type="button" className="secondary" disabled={loading} onClick={() => void postAction('/actions/approval-watcher')}>
               Run approval watcher
             </button>
           </div>
-          <label style={{ display: 'block', marginTop: '1rem' }}>
-            Contact email (research / regenerate)
-            <input
-              type="text"
-              style={{ width: '100%', maxWidth: 400 }}
-              value={actionEmail}
-              onChange={(e) => setActionEmail(e.target.value)}
-              placeholder="name@company.com"
-            />
-          </label>
-          <div className="row-actions" style={{ marginTop: '0.75rem' }}>
-            <button type="button" className="secondary" disabled={loading} onClick={() => void researchAgain()}>
-              Research again
-            </button>
-            <button type="button" className="secondary" disabled={loading} onClick={() => void regenerateSequence()}>
-              Regenerate sequence
-            </button>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Company</th>
+                  <th>Pipeline</th>
+                  <th>Campaign</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sequenceContactsFiltered.map((c) => {
+                  const hasCompanyUrl = Boolean(String(c.companyUrl ?? '').trim());
+                  return (
+                    <tr key={c.email}>
+                      <td>{c._rowIndex}</td>
+                      <td>{c.email}</td>
+                      <td>
+                        {String(c.firstName)} {String(c.lastName)}
+                      </td>
+                      <td>{String(c.company)}</td>
+                      <td>{String(c.pipelineStatus)}</td>
+                      <td>{String(c.campaignId)}</td>
+                      <td>{String(c.status)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={loading || !hasCompanyUrl}
+                          title={hasCompanyUrl ? 'Re-run research and alignment' : 'Set company_url on the contact first'}
+                          onClick={() => void researchAgainForEmail(c.email)}
+                        >
+                          Research again
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={loading}
+                          title="Supersede open review rows and regenerate AI sequence (409 if review rows already have campaign_id)"
+                          onClick={() => void regenerateSequenceForEmail(c.email)}
+                        >
+                          Regenerate sequence
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          {sequenceContactsFiltered.length === 0 ? (
+            <p style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
+              {contacts.length === 0
+                ? 'No contacts loaded yet. Click Refresh (save your API key first).'
+                : 'No contacts match this search. Clear the filter or click Refresh.'}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
