@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:admin",
+    "build:admin": "npm --prefix admin-ui install --no-audit --no-fund && npm --prefix admin-ui run build",
     "build:watch": "tsc --watch",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",

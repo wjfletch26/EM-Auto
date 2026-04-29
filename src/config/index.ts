@@ -63,6 +63,10 @@ function buildRawConfig() {
       nodeEnv: env.NODE_ENV,
       physicalAddress: env.PHYSICAL_ADDRESS,
     },
+    admin: {
+      apiKey: env.ADMIN_API_KEY,
+      uiEnabled: env.ADMIN_UI_ENABLED,
+    },
     pipeline: {
       enabled: env.PIPELINE_ENABLED,
       cron: env.PIPELINE_CRON,
@@ -138,6 +142,10 @@ export function getRedactedConfig(): Record<string, unknown> {
     schedule: config.schedule,
     logging: config.logging,
     app: config.app,
+    admin: {
+      apiKey: config.admin.apiKey ? '***REDACTED***' : '(not set)',
+      uiEnabled: config.admin.uiEnabled,
+    },
     pipeline: config.pipeline,
     perplexity: {
       apiKey: config.perplexity.apiKey ? '***REDACTED***' : '(not set)',

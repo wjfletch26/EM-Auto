@@ -102,6 +102,19 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ---
 
+## Admin API and UI (optional)
+
+| Variable | Type | Required | Description | Example |
+|---|---|---|---|---|
+| `ADMIN_API_KEY` | string | No | Shared secret for `/api/admin/*`. If unset or empty, admin JSON routes return **503** and the SPA is not served. Use a long random value (e.g. `openssl rand -hex 32`). Send as `Authorization: Bearer <key>` or `X-Admin-Key: <key>`. | `(long random secret)` |
+| `ADMIN_UI_ENABLED` | boolean | No | When `ADMIN_API_KEY` is set, serve the built admin app at `/admin`. Default: `true`. Set to `false` to expose only the API (no static UI). | `true` |
+
+**Notes**:
+- Treat `ADMIN_API_KEY` like a password; never commit it to git.
+- The admin API performs CRUD on Google Sheets; restrict network access (firewall/VPN) in production.
+
+---
+
 ## Example `.env` File
 
 ```env
@@ -149,6 +162,10 @@ LOG_RETENTION_DAYS=30
 # --- Application ---
 NODE_ENV=production
 PHYSICAL_ADDRESS=123 Main St, Suite 100, City, ST 00000
+
+# --- Admin (optional — leave unset to disable /api/admin and /admin) ---
+# ADMIN_API_KEY=
+# ADMIN_UI_ENABLED=true
 ```
 
 ---

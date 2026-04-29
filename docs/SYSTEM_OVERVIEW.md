@@ -25,10 +25,10 @@ The system runs on a Linux VPS with no human interaction required during normal 
 | **Bounce detection** | Detect bounces from SMTP error codes at send time |
 | **Reply processing** | (Conditional) If IMAP/EWS access is available: poll inbox, classify replies, update Sheets |
 | **Audit logging** | Structured logs on disk for every system action |
+| **Admin API and UI** | Optional operator UI at `/admin` and JSON API at `/api/admin/*` when `ADMIN_API_KEY` is set (see [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md)) |
 
 ## What It Does NOT Do (MVP Scope)
 
-- Does not provide a web dashboard or admin UI
 - Does not use a database (Google Sheets is the data store)
 - Does not support branching sequences (linear only)
 - Does not support multiple sending addresses
@@ -57,8 +57,9 @@ The system runs on a Linux VPS with no human interaction required during normal 
 │                 └──────────────┘  └───────────────┘    │
 │                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Unsubscribe  │  │ Local State  │  │ Logger       │  │
-│  │ Web Server   │  │ (JSON files) │  │ (disk logs)  │  │
+│  │ Web server   │  │ Local State  │  │ Logger       │  │
+│  │ (unsubscribe │  │ (JSON files) │  │ (disk logs)  │  │
+│  │ + admin UI)  │  │              │  │              │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 └─────────────────────────────────────────────────────────┘
          │                    │                │
@@ -112,6 +113,7 @@ The system runs on a Linux VPS with no human interaction required during normal 
 
 For implementation details, see:
 
+- [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) — Includes `ADMIN_API_KEY` / `ADMIN_UI_ENABLED` for the operator UI
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Technical architecture and module design
 - [WORKFLOWS.md](./WORKFLOWS.md) — Step-by-step process flows
 - [SECURITY.md](./SECURITY.md) — Threat model and compliance
