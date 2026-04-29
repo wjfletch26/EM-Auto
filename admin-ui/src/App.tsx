@@ -9,12 +9,19 @@ type ContactRow = Record<string, unknown> & { email: string; _rowIndex: number }
 /** Company intelligence row from API. */
 type IntelRow = Record<string, unknown> & { contactEmail: string; _rowIndex: number };
 
-/** Review queue row from API. */
+/** Review queue row from API (subject/body from generated sequence). */
 type ReviewRow = Record<string, unknown> & {
   contactEmail: string;
+  companyName: string;
   _rowIndex: number;
   stepNumber: number;
+  emailPurpose: string;
+  subject: string;
+  body: string;
   status: string;
+  reviewerNotes: string;
+  generatedDate: string;
+  campaignId: string;
 };
 
 export function App(): JSX.Element {
@@ -27,6 +34,8 @@ export function App(): JSX.Element {
   const [intelRows, setIntelRows] = useState<IntelRow[]>([]);
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
   const [reviewFilterEmail, setReviewFilterEmail] = useState('');
+  /** Row selected to show full email content below the table. */
+  const [selectedReviewRow, setSelectedReviewRow] = useState<ReviewRow | null>(null);
 
   const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
   const [contactDraft, setContactDraft] = useState<Record<string, string>>({});
@@ -85,6 +94,11 @@ export function App(): JSX.Element {
         : '';
       const data = await adminFetch<{ reviewQueue: ReviewRow[] }>(`/review-queue${q}`);
       setReviewRows(data.reviewQueue);
+      // Keep email preview aligned with sheet after refresh (e.g. after Approve).
+      setSelectedReviewRow((prev) => {
+        if (!prev) return null;
+        return data.reviewQueue.find((x) => x._rowIndex === prev._rowIndex) ?? null;
+      });
       showMsg('ok', `Loaded ${data.reviewQueue.length} review rows`);
     } catch (e) {
       showMsg('err', e instanceof Error ? e.message : String(e));
@@ -626,6 +640,10 @@ export function App(): JSX.Element {
       {tab === 'review' ? (
         <div className="panel">
           <h2>Review queue</h2>
+          <p style={{ fontSize: '0.85rem', color: '#9aa0a6', marginTop: 0 }}>
+            Click <strong>View</strong> on a row to read the generated subject and body. Use the status buttons after
+            reviewing.
+          </p>
           <div className="row-actions" style={{ alignItems: 'center' }}>
             <label>
               Filter by email
@@ -645,64 +663,121 @@ export function App(): JSX.Element {
               <thead>
                 <tr>
                   <th>Row</th>
-                  <th>Email</th>
+                  <th>Contact</th>
                   <th>Step</th>
+                  <th>Subject (preview)</th>
                   <th>Status</th>
                   <th>Campaign</th>
-                  <th>Actions</th>
+                  <th>View / actions</th>
                 </tr>
               </thead>
               <tbody>
-                {reviewRows.map((r) => (
-                  <tr key={r._rowIndex}>
-                    <td>{r._rowIndex}</td>
-                    <td>{r.contactEmail}</td>
-                    <td>{r.stepNumber}</td>
-                    <td>{r.status}</td>
-                    <td>{String(r.campaignId)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={loading}
-                        onClick={() =>
-                          void saveReviewRow(r, {
-                            status: 'approved',
-                          })
-                        }
-                      >
-                        Approve
-                      </button>{' '}
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={loading}
-                        onClick={() =>
-                          void saveReviewRow(r, {
-                            status: 'pending_review',
-                          })
-                        }
-                      >
-                        Pending
-                      </button>{' '}
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={loading}
-                        onClick={() =>
-                          void saveReviewRow(r, {
-                            status: 'superseded',
-                          })
-                        }
-                      >
-                        Supersede
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {reviewRows.map((r) => {
+                  const subj = String(r.subject ?? '');
+                  const preview = subj.length > 56 ? `${subj.slice(0, 56)}…` : subj;
+                  const isSel = selectedReviewRow?._rowIndex === r._rowIndex;
+                  return (
+                    <tr key={r._rowIndex} className={isSel ? 'selected' : ''}>
+                      <td>{r._rowIndex}</td>
+                      <td>{r.contactEmail}</td>
+                      <td>{r.stepNumber}</td>
+                      <td title={subj}>{preview || '—'}</td>
+                      <td>{r.status}</td>
+                      <td>{String(r.campaignId)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => setSelectedReviewRow(r)}
+                        >
+                          View
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={loading}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void saveReviewRow(r, { status: 'approved' });
+                          }}
+                        >
+                          Approve
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={loading}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void saveReviewRow(r, { status: 'pending_review' });
+                          }}
+                        >
+                          Pending
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={loading}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void saveReviewRow(r, { status: 'superseded' });
+                          }}
+                        >
+                          Supersede
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
+          {selectedReviewRow ? (
+            <div className="review-email-panel">
+              <div className="review-email-panel-header">
+                <h3>
+                  Step {selectedReviewRow.stepNumber} — sheet row {selectedReviewRow._rowIndex}
+                </h3>
+                <button type="button" className="secondary" onClick={() => setSelectedReviewRow(null)}>
+                  Close preview
+                </button>
+              </div>
+              <p className="review-meta">
+                <strong>To:</strong> {selectedReviewRow.contactEmail}
+                {String(selectedReviewRow.companyName) ? (
+                  <>
+                    {' '}
+                    · <strong>Company:</strong> {String(selectedReviewRow.companyName)}
+                  </>
+                ) : null}
+                {String(selectedReviewRow.generatedDate) ? (
+                  <>
+                    {' '}
+                    · <strong>Generated:</strong> {String(selectedReviewRow.generatedDate)}
+                  </>
+                ) : null}
+              </p>
+              <div className="review-field">
+                <span className="review-label">Purpose</span>
+                <div className="review-value">{String(selectedReviewRow.emailPurpose ?? '—')}</div>
+              </div>
+              <div className="review-field">
+                <span className="review-label">Subject</span>
+                <div className="review-value review-subject">{String(selectedReviewRow.subject ?? '')}</div>
+              </div>
+              <div className="review-field">
+                <span className="review-label">Body</span>
+                <div className="review-body">{String(selectedReviewRow.body ?? '')}</div>
+              </div>
+              {String(selectedReviewRow.reviewerNotes ?? '').trim() ? (
+                <div className="review-field">
+                  <span className="review-label">Reviewer / QC notes</span>
+                  <div className="review-value review-qc">{String(selectedReviewRow.reviewerNotes)}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
