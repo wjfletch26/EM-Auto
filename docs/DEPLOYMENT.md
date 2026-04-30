@@ -2,7 +2,7 @@
 
 ## Overview
 
-The application runs on a single Linux VPS as a Node.js process managed by PM2, with Caddy as a reverse proxy providing automatic HTTPS for the unsubscribe endpoint.
+The application runs on a single Linux VPS as a Node.js process managed by PM2, with Caddy as a reverse proxy providing automatic HTTPS for the public HTTP surface (unsubscribe, health, and—when configured—the optional admin UI and `/api/admin` API on the same origin).
 
 ---
 
@@ -147,7 +147,7 @@ cd /home/deaton/app
 # Install dependencies
 npm install --production
 
-# Build TypeScript
+# Build TypeScript and the admin SPA (Vite output → dist/admin/)
 npm run build
 
 # Create data directories
@@ -168,7 +168,8 @@ chmod 600 credentials/service-account.json
 # Create .env file
 cp .env.example .env
 nano .env
-# Fill in all required values (see ENVIRONMENT_VARIABLES.md)
+# Fill in all required values (see ENVIRONMENT_VARIABLES.md).
+# Optional: set ADMIN_API_KEY to enable /api/admin and the /admin operator UI (see SECURITY.md).
 
 # Set .env file permissions
 chmod 600 .env
@@ -196,6 +197,12 @@ pm2 status
 
 # Check the unsubscribe endpoint responds
 curl -I https://unsub.deatonengineering.us/health
+
+# If ADMIN_API_KEY is set: /api/admin/contacts returns 401 without a key, 200 with Authorization: Bearer <key> (or X-Admin-Key).
+# If ADMIN_API_KEY is unset: same path returns 503 (admin disabled).
+curl -s -o /dev/null -w "admin no key -> %{http_code}\n" https://unsub.deatonengineering.us/api/admin/contacts
+
+# Optional: open https://unsub.deatonengineering.us/admin/ in a browser when the key is set and ADMIN_UI_ENABLED is true (replace host with yours).
 
 # Check application logs for startup messages
 pm2 logs deaton-outreach --lines 20
@@ -253,7 +260,7 @@ git pull origin main
 # Install any new dependencies
 npm install --production
 
-# Rebuild TypeScript
+# Rebuild TypeScript and admin UI
 npm run build
 
 # Restart the application (graceful)

@@ -43,7 +43,7 @@
 │  │                                                          │   │
 │  │  ┌────────────┐  ┌──────────────┐  ┌────────────────┐   │   │
 │  │  │ Express.js │  │ Local State  │  │ Logger (Pino)  │   │   │
-│  │  │ (unsub web)│  │ (JSON files) │  │ (disk + stdout)│   │   │
+│  │  │ + admin API│  │ (JSON files) │  │ (disk + stdout)│   │   │
 │  │  └────────────┘  └──────────────┘  └────────────────┘   │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                 │
@@ -85,6 +85,12 @@ main.ts
   │     │     ├── engine/unsubscribe.ts
   │     │     ├── services/sheets.ts
   │     │     └── logging/logger.ts
+  │     ├── web/middleware/admin-auth.ts (ADMIN_API_KEY gate)
+  │     ├── web/routes/admin/router.ts
+  │     │     ├── services/sheets.ts
+  │     │     ├── engine/send-engine.ts
+  │     │     ├── engine/pipeline-orchestrator.ts
+  │     │     └── engine/approval-watcher.ts
   │     └── logging/logger.ts
   └── config/index.ts
         └── config/schema.ts (Zod)
@@ -125,14 +131,27 @@ Engines contain business logic. They call services but are not called by service
 | `reply-processor.ts` | Polls IMAP for new messages → classifies each reply → updates Sheets |
 | `bounce-handler.ts` | Detects bounces from SMTP errors and IMAP NDR messages → marks contacts as bounced |
 | `unsubscribe.ts` | Generates signed unsubscribe tokens, validates tokens, processes unsubscribe requests |
+| `pipeline-orchestrator.ts` | Runs the LLM/Sheets pipeline cycle (company research, alignment, review queue) |
+| `approval-watcher.ts` | Watches approved review-queue rows and advances contacts in Sheets |
 
 ### Web Layer (`src/web/`)
 
-A minimal Express.js server that handles:
-- `GET /unsubscribe?token=<signed-token>` — Renders a confirmation page and processes the unsubscribe.
-- `GET /health` — Returns 200 OK for monitoring.
+Express.js serves public and operator endpoints on one process (port from `UNSUB_PORT`, default `3000`), typically reverse-proxied by Caddy with TLS.
 
-Runs on a local port (e.g., 3000), reverse-proxied by Caddy with automatic TLS.
+**Always mounted**
+
+- `GET /health` — JSON `{ status: "ok" }` for monitoring.
+- `GET /unsubscribe` — Rate-limited; validates token and processes unsubscribe (uses `unsubscribe.ts` + Sheets).
+
+**Admin API (optional)**
+
+- Prefix: `/api/admin`. If `ADMIN_API_KEY` is unset or empty, these routes respond **503** and no admin static files are served.
+- If the key is set: `requireAdminApiKey` accepts `Authorization: Bearer <key>` or `X-Admin-Key: <key>`. JSON body limit **10 MB** (imports).
+- Router: `web/routes/admin/router.ts` — Sheets-backed CRUD for contacts, company intelligence, review queue; `POST` actions for send cycle, pipeline cycle, approval watcher, and contact-specific pipeline helpers.
+
+**Admin UI (optional)**
+
+- When `ADMIN_API_KEY` is set **and** `ADMIN_UI_ENABLED` is true (default): static files from `dist/admin` (produced by `npm run build:admin`) are served under `/admin`. `GET /` redirects to `/admin/` so operators land on the SPA.
 
 ### State Layer (`src/state/`)
 
@@ -218,7 +237,7 @@ See [SECURITY.md](./SECURITY.md) for the full threat model. Key boundaries:
 - **Google service account JSON key** is stored on disk, readable only by the application user.
 - **Unsubscribe tokens** are HMAC-signed to prevent forgery.
 - **No secrets in Google Sheets** — Sheets contain only contact data and status.
-- **No admin UI** — no attack surface for web-based exploits beyond the unsubscribe endpoint.
+- **Admin API/UI** — Same origin as unsubscribe when proxied on one host. Protect `ADMIN_API_KEY` like a password; without it, admin routes are disabled (503). See [SECURITY.md](./SECURITY.md).
 
 ## Technology Decision Records
 
@@ -229,7 +248,7 @@ See [SECURITY.md](./SECURITY.md) for the full threat model. Key boundaries:
 | IMAP library | imapflow | Modern, promise-based, active maintenance, handles IDLE |
 | Google Sheets | googleapis (official SDK) | Most reliable, direct API access, free tier sufficient |
 | Template engine | Handlebars | Logic-light (prevents injection), familiar syntax, Node.js native |
-| HTTP framework | Express.js | Minimal surface, only needed for one route |
+| HTTP framework | Express.js | Unsubscribe, health, optional `/api/admin` + `/admin` SPA |
 | Scheduler | node-cron | In-process, no external dependency, cron syntax |
 | Config validation | Zod | Runtime validation, great TypeScript inference, small footprint |
 | Logger | Pino | Fastest Node.js logger, structured JSON output, low overhead |
