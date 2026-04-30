@@ -20,4 +20,18 @@ describe('replaceEmDashesWithPlainHyphen', () => {
   it('leaves normal hyphens and text unchanged', () => {
     assert.equal(replaceEmDashesWithPlainHyphen('co-op'), 'co-op');
   });
+
+  it('inserts missing space after sentence punctuation', () => {
+    assert.equal(
+      replaceEmDashesWithPlainHyphen('This scales well.Let me know.'),
+      'This scales well. Let me know.',
+    );
+  });
+
+  it('repairs merged prefixed words seen in generated copy', () => {
+    assert.equal(
+      replaceEmDashesWithPlainHyphen('concept-to-commissioningde-risk your launch'),
+      'concept-to-commissioning de-risk your launch',
+    );
+  });
 });

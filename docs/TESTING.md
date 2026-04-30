@@ -5,6 +5,40 @@ Use it when you want to quickly verify the system still works.
 
 ---
 
+## 0) Local Test Spreadsheet Mode (Recommended)
+
+Use this mode to test safely against a sandbox sheet before deploying to VPS.
+
+1. Create a test spreadsheet copy in Google Sheets.
+2. Share it with the service account in `credentials/service-account.json`.
+3. Create a local-only `.env.local` file (gitignored) with:
+
+```bash
+GOOGLE_SPREADSHEET_ID=<TEST_SPREADSHEET_ID>
+TEST_RECIPIENT=<your-email>
+LOG_LEVEL=debug
+```
+
+How it works:
+
+- The app loads `.env` first.
+- If `.env.local` exists, it overrides matching values for local runs only.
+- VPS behavior is unchanged unless you also create `.env.local` on the VPS.
+
+Suggested local flow:
+
+```bash
+npm run build
+npm test
+npm run dev:local
+npx tsx scripts/test-send-cycle.ts
+```
+
+Verify that updates appear in the **test** spreadsheet, not production.
+When finished, delete or rename `.env.local` to return to default `.env` values.
+
+---
+
 ## 1) Fast Validation (Most Common)
 
 Run these commands from the project root:

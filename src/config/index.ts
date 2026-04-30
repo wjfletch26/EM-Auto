@@ -11,8 +11,10 @@
 import dotenv from 'dotenv';
 import { configSchema, type AppConfig } from './schema.js';
 
-// Load .env from project root into process.env
+// Load base .env from project root into process.env.
 dotenv.config();
+// Load optional local overrides for safe local testing (ignored by git).
+dotenv.config({ path: '.env.local', override: true });
 
 /**
  * Maps flat process.env vars into the nested shape the Zod schema expects.

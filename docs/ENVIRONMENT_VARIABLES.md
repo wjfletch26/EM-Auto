@@ -6,17 +6,18 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## SMTP Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `SMTP_HOST` | string | Yes | Microsoft SMTP server hostname | `smtp.office365.com` |
-| `SMTP_PORT` | number | Yes | SMTP port (587 for STARTTLS) | `587` |
-| `SMTP_USER` | string | Yes | Sending email address (also used as the "From" address) | `dave@deatonengineering.us` |
-| `SMTP_PASS` | string | Yes | Email account password | `(your password)` |
-| `SMTP_SECURE` | boolean | No | Use implicit TLS (true for port 465, false for STARTTLS on 587) | `false` |
-| `SMTP_FROM_NAME` | string | No | Display name for the "From" field | `Dave at Deaton Engineering` |
-| `REPLY_FORWARD_TO` | string | No | Default mailbox for forwarded inbound replies in Tier 3 workflow | `dknieriem@deatonengineering.com` |
+| Variable           | Type    | Required | Description                                                      | Example                           |
+| ------------------ | ------- | -------- | ---------------------------------------------------------------- | --------------------------------- |
+| `SMTP_HOST`        | string  | Yes      | Microsoft SMTP server hostname                                   | `smtp.office365.com`              |
+| `SMTP_PORT`        | number  | Yes      | SMTP port (587 for STARTTLS)                                     | `587`                             |
+| `SMTP_USER`        | string  | Yes      | Sending email address (also used as the "From" address)          | `dave@deatonengineering.us`       |
+| `SMTP_PASS`        | string  | Yes      | Email account password                                           | `(your password)`                 |
+| `SMTP_SECURE`      | boolean | No       | Use implicit TLS (true for port 465, false for STARTTLS on 587)  | `false`                           |
+| `SMTP_FROM_NAME`   | string  | No       | Display name for the "From" field                                | `Dave at Deaton Engineering`      |
+| `REPLY_FORWARD_TO` | string  | No       | Default mailbox for forwarded inbound replies in Tier 3 workflow | `dknieriem@deatonengineering.com` |
 
 **Notes**:
+
 - `SMTP_SECURE=false` with port 587 means Nodemailer will use STARTTLS (upgrades to TLS after connecting). This is the correct setting for Microsoft 365.
 - The `SMTP_USER` value is also used as the envelope sender and Reply-To address.
 - `REPLY_FORWARD_TO` controls where inbound replies are forwarded for manual review.
@@ -25,15 +26,16 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## IMAP Configuration (Conditional — for reply processing)
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `IMAP_ENABLED` | boolean | No | Enable IMAP-based reply processing. Default: `false`. | `true` |
-| `IMAP_HOST` | string | If IMAP_ENABLED | IMAP server hostname | `outlook.office365.com` |
-| `IMAP_PORT` | number | If IMAP_ENABLED | IMAP port (993 for TLS) | `993` |
-| `IMAP_USER` | string | If IMAP_ENABLED | Mailbox username (same as SMTP_USER) | `dave@deatonengineering.us` |
-| `IMAP_PASS` | string | If IMAP_ENABLED | Mailbox password (same as SMTP_PASS) | `(your password)` |
+| Variable       | Type    | Required        | Description                                           | Example                     |
+| -------------- | ------- | --------------- | ----------------------------------------------------- | --------------------------- |
+| `IMAP_ENABLED` | boolean | No              | Enable IMAP-based reply processing. Default: `false`. | `true`                      |
+| `IMAP_HOST`    | string  | If IMAP_ENABLED | IMAP server hostname                                  | `outlook.office365.com`     |
+| `IMAP_PORT`    | number  | If IMAP_ENABLED | IMAP port (993 for TLS)                               | `993`                       |
+| `IMAP_USER`    | string  | If IMAP_ENABLED | Mailbox username (same as SMTP_USER)                  | `dave@deatonengineering.us` |
+| `IMAP_PASS`    | string  | If IMAP_ENABLED | Mailbox password (same as SMTP_PASS)                  | `(your password)`           |
 
 **Notes**:
+
 - If `IMAP_ENABLED` is `false` or unset, the reply processor is disabled. The system runs in Tier 3 mode (manual reply processing).
 - If `IMAP_ENABLED` is `true` but the connection fails at startup, the system logs a warning and falls back to Tier 3.
 
@@ -41,12 +43,13 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## Google Sheets Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `GOOGLE_SERVICE_ACCOUNT_PATH` | string | Yes | Absolute path to the service account JSON key file | `/home/deaton/app/credentials/service-account.json` |
-| `GOOGLE_SPREADSHEET_ID` | string | Yes | The ID of the Google Sheet (from the URL) | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms` |
+| Variable                      | Type   | Required | Description                                        | Example                                             |
+| ----------------------------- | ------ | -------- | -------------------------------------------------- | --------------------------------------------------- |
+| `GOOGLE_SERVICE_ACCOUNT_PATH` | string | Yes      | Absolute path to the service account JSON key file | `/home/deaton/app/credentials/service-account.json` |
+| `GOOGLE_SPREADSHEET_ID`       | string | Yes      | The ID of the Google Sheet (from the URL)          | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms`      |
 
 **Notes**:
+
 - The spreadsheet ID is the long string in the Google Sheets URL: `https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit`
 - The service account must be shared as an Editor on the spreadsheet.
 
@@ -54,14 +57,15 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## Unsubscribe Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `UNSUB_SECRET` | string | Yes | HMAC secret for signing unsubscribe tokens. Must be at least 32 characters. | `a1b2c3d4e5f6...` (generate with `openssl rand -hex 32`) |
-| `UNSUB_BASE_URL` | string | Yes | Public base URL for the unsubscribe endpoint | `https://unsub.deatonengineering.us` |
-| `UNSUB_EXPIRY_DAYS` | number | No | Days until unsubscribe tokens expire. Default: `90`. | `90` |
-| `UNSUB_PORT` | number | No | Local port for the Express.js server. Default: `3000`. | `3000` |
+| Variable            | Type   | Required | Description                                                                 | Example                                                  |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `UNSUB_SECRET`      | string | Yes      | HMAC secret for signing unsubscribe tokens. Must be at least 32 characters. | `a1b2c3d4e5f6...` (generate with `openssl rand -hex 32`) |
+| `UNSUB_BASE_URL`    | string | Yes      | Public base URL for the unsubscribe endpoint                                | `https://unsub.deatonengineering.us`                     |
+| `UNSUB_EXPIRY_DAYS` | number | No       | Days until unsubscribe tokens expire. Default: `90`.                        | `90`                                                     |
+| `UNSUB_PORT`        | number | No       | Local port for the Express.js server. Default: `3000`.                      | `3000`                                                   |
 
 **Notes**:
+
 - The `UNSUB_BASE_URL` must be accessible from the public internet (recipients click this link).
 - Caddy reverse proxies `UNSUB_BASE_URL` to `localhost:UNSUB_PORT`.
 
@@ -69,14 +73,15 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## Scheduling Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `SEND_CRON` | string | No | Cron expression for the send cycle. Default: `*/5 * * * *` (every 5 min). | `*/5 * * * *` |
-| `REPLY_CRON` | string | No | Cron expression for the reply cycle. Default: `*/5 * * * *` (every 5 min). | `*/5 * * * *` |
-| `SEND_DELAY_MS` | number | No | Delay in milliseconds between individual email sends. Default: `15000` (15 sec). | `15000` |
-| `SEND_BATCH_SIZE` | number | No | Maximum emails to send per cycle. Default: `10`. | `10` |
+| Variable          | Type   | Required | Description                                                                      | Example       |
+| ----------------- | ------ | -------- | -------------------------------------------------------------------------------- | ------------- |
+| `SEND_CRON`       | string | No       | Cron expression for the send cycle. Default: `*/5 * * * *` (every 5 min).        | `*/5 * * * *` |
+| `REPLY_CRON`      | string | No       | Cron expression for the reply cycle. Default: `*/5 * * * *` (every 5 min).       | `*/5 * * * *` |
+| `SEND_DELAY_MS`   | number | No       | Delay in milliseconds between individual email sends. Default: `15000` (15 sec). | `15000`       |
+| `SEND_BATCH_SIZE` | number | No       | Maximum emails to send per cycle. Default: `10`.                                 | `10`          |
 
 **Notes**:
+
 - `SEND_DELAY_MS` prevents triggering spam filters by spacing out sends.
 - `SEND_BATCH_SIZE` limits how many emails are sent per cron cycle. At 15 seconds between sends and batch size 10, one cycle takes up to 2.5 minutes.
 - With `SEND_CRON` every 5 minutes and batch size 10, the theoretical max is ~2,880 emails/day (well over the 50/day target).
@@ -85,31 +90,32 @@ All configuration is loaded from a `.env` file at the project root. The config m
 
 ## Logging Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `LOG_LEVEL` | string | No | Minimum log level. One of: `debug`, `info`, `warn`, `error`. Default: `info`. | `info` |
-| `LOG_DIR` | string | No | Directory for log files. Default: `./data/logs`. | `./data/logs` |
-| `LOG_RETENTION_DAYS` | number | No | Days to keep log files. Default: `30`. | `30` |
+| Variable             | Type   | Required | Description                                                                   | Example       |
+| -------------------- | ------ | -------- | ----------------------------------------------------------------------------- | ------------- |
+| `LOG_LEVEL`          | string | No       | Minimum log level. One of: `debug`, `info`, `warn`, `error`. Default: `info`. | `info`        |
+| `LOG_DIR`            | string | No       | Directory for log files. Default: `./data/logs`.                              | `./data/logs` |
+| `LOG_RETENTION_DAYS` | number | No       | Days to keep log files. Default: `30`.                                        | `30`          |
 
 ---
 
 ## Application Configuration
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `NODE_ENV` | string | No | Environment. One of: `development`, `production`. Default: `production`. | `production` |
-| `PHYSICAL_ADDRESS` | string | Yes | Physical mailing address for CAN-SPAM compliance. Included in email footers. | `123 Main St, Suite 100, Houston, TX 77001` |
+| Variable           | Type   | Required | Description                                                                  | Example                                                                  |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `NODE_ENV`         | string | No       | Environment. One of: `development`, `production`. Default: `production`.     | `production`                                                             |
+| `PHYSICAL_ADDRESS` | string | Yes      | Physical mailing address for CAN-SPAM compliance. Included in email footers. | `Deaton Engineering Building, 2 Sierra Way St 110, Georgetown, TX 78626` |
 
 ---
 
 ## Admin API and UI (optional)
 
-| Variable | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `ADMIN_API_KEY` | string | No | Shared secret for `/api/admin/*`. If unset or empty, admin JSON routes return **503** and the SPA is not served. Use a long random value (e.g. `openssl rand -hex 32`). Send as `Authorization: Bearer <key>` or `X-Admin-Key: <key>`. | `(long random secret)` |
-| `ADMIN_UI_ENABLED` | boolean | No | When `ADMIN_API_KEY` is set, serve the built admin app at `/admin`. Default: `true`. Set to `false` to expose only the API (no static UI). | `true` |
+| Variable           | Type    | Required | Description                                                                                                                                                                                                                            | Example                |
+| ------------------ | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `ADMIN_API_KEY`    | string  | No       | Shared secret for `/api/admin/*`. If unset or empty, admin JSON routes return **503** and the SPA is not served. Use a long random value (e.g. `openssl rand -hex 32`). Send as `Authorization: Bearer <key>` or `X-Admin-Key: <key>`. | `(long random secret)` |
+| `ADMIN_UI_ENABLED` | boolean | No       | When `ADMIN_API_KEY` is set, serve the built admin app at `/admin`. Default: `true`. Set to `false` to expose only the API (no static UI).                                                                                             | `true`                 |
 
 **Notes**:
+
 - Treat `ADMIN_API_KEY` like a password; never commit it to git.
 - The admin API performs CRUD on Google Sheets; restrict network access (firewall/VPN) in production.
 
@@ -161,7 +167,7 @@ LOG_RETENTION_DAYS=30
 
 # --- Application ---
 NODE_ENV=production
-PHYSICAL_ADDRESS=123 Main St, Suite 100, City, ST 00000
+PHYSICAL_ADDRESS=Deaton Engineering Building, 2 Sierra Way St 110, Georgetown, TX 78626
 
 # --- Admin (optional — leave unset to disable /api/admin and /admin) ---
 # ADMIN_API_KEY=
@@ -176,7 +182,7 @@ The config module should validate these variables at startup. Here is the expect
 
 ```typescript
 // src/config/schema.ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const configSchema = z.object({
   smtp: z.object({
@@ -185,12 +191,16 @@ export const configSchema = z.object({
     user: z.string().email(),
     pass: z.string().min(1),
     secure: z.coerce.boolean().default(false),
-    fromName: z.string().optional().default(''),
-    replyForwardTo: z.string().email().optional().default('dknieriem@deatonengineering.com'),
+    fromName: z.string().optional().default(""),
+    replyForwardTo: z
+      .string()
+      .email()
+      .optional()
+      .default("dknieriem@deatonengineering.com"),
   }),
   imap: z.object({
     enabled: z.coerce.boolean().default(false),
-    host: z.string().optional().default('outlook.office365.com'),
+    host: z.string().optional().default("outlook.office365.com"),
     port: z.coerce.number().optional().default(993),
     user: z.string().optional(),
     pass: z.string().optional(),
@@ -206,18 +216,18 @@ export const configSchema = z.object({
     port: z.coerce.number().int().positive().default(3000),
   }),
   schedule: z.object({
-    sendCron: z.string().default('*/5 * * * *'),
-    replyCron: z.string().default('*/5 * * * *'),
+    sendCron: z.string().default("*/5 * * * *"),
+    replyCron: z.string().default("*/5 * * * *"),
     sendDelayMs: z.coerce.number().int().nonnegative().default(15000),
     sendBatchSize: z.coerce.number().int().positive().default(10),
   }),
   logging: z.object({
-    level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-    dir: z.string().default('./data/logs'),
+    level: z.enum(["debug", "info", "warn", "error"]).default("info"),
+    dir: z.string().default("./data/logs"),
     retentionDays: z.coerce.number().int().positive().default(30),
   }),
   app: z.object({
-    nodeEnv: z.enum(['development', 'production']).default('production'),
+    nodeEnv: z.enum(["development", "production"]).default("production"),
     physicalAddress: z.string().min(1),
   }),
 });

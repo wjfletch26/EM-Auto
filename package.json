@@ -10,6 +10,7 @@
     "build:watch": "tsc --watch",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
+    "dev:local": "tsx watch src/main.ts",
     "lint": "eslint src/ --ext .ts",
     "test": "tsx --test src/**/*.test.ts",
     "test:smtp": "tsx scripts/test-smtp.ts",
