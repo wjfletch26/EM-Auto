@@ -4,10 +4,6 @@
  * Provides sendEmail(), verifyConnection(), and disconnect().
  * The Send Engine calls this; it never touches Nodemailer directly.
  *
- * Non-production modes (see APP_ENV / DRY_RUN / TEST_RECIPIENT):
- * - simulated_send: no SMTP; logs intended recipient and returns a synthetic result (Sheets still update).
- * - test_recipient: real SMTP but envelope `to` is TEST_RECIPIENT; original in X-Original-To.
- *
  * Reference: specs/SEND_ENGINE.md (SMTP section)
  */
 
@@ -77,28 +73,6 @@ function getTransporter(): nodemailer.Transporter<SMTPTransport.SentMessageInfo>
   return transporter;
 }
 
-/**
- * Simulated send: no SMTP — engine still treats this as a successful send for Sheet updates.
- */
-function sendSimulatedEmail(message: EmailMessage): SendResult {
-  const syntheticId = `simulated-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  logger.info(
-    {
-      module: "smtp",
-      simulatedSend: true,
-      intendedTo: message.to,
-      subject: message.subject,
-      messageId: syntheticId,
-    },
-    "Simulated send (no SMTP; Sheets may still update as if sent)",
-  );
-  return {
-    messageId: syntheticId,
-    accepted: [message.to],
-    rejected: [],
-  };
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -106,80 +80,26 @@ function sendSimulatedEmail(message: EmailMessage): SendResult {
  * Throws on auth failures or connection errors — the Send Engine decides how to handle.
  */
 export async function sendEmail(message: EmailMessage): Promise<SendResult> {
-  // Production live: real SMTP to the given address.
-  if (config.app.emailMode === "production_live") {
-    const t = getTransporter();
-    const mailOptions: nodemailer.SendMailOptions = {
-      from: { name: message.from.name, address: message.from.address },
-      to: message.to,
-      subject: message.subject,
-      html: message.html,
-      text: message.text,
-      headers: message.headers,
-    };
-
-    logger.debug(
-      { module: "smtp", to: message.to, subject: message.subject },
-      "Sending email",
-    );
-
-    const info = await t.sendMail(mailOptions);
-
-    logger.info(
-      { module: "smtp", to: message.to, messageId: info.messageId },
-      "Email sent successfully",
-    );
-
-    return {
-      messageId: info.messageId,
-      accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [],
-      rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
-    };
-  }
-
-  // Simulated send: no mail leaves the server.
-  if (config.app.emailMode === "simulated_send") {
-    return sendSimulatedEmail(message);
-  }
-
-  // Test recipient: one mailbox catches everything; preserve intended recipient in header.
-  const originalTo = message.to;
-  const safeTo = config.app.testRecipient;
-  const mergedHeaders = {
-    ...message.headers,
-    "X-Original-To": originalTo,
-  };
-
   const t = getTransporter();
+
   const mailOptions: nodemailer.SendMailOptions = {
     from: { name: message.from.name, address: message.from.address },
-    to: safeTo,
+    to: message.to,
     subject: message.subject,
     html: message.html,
     text: message.text,
-    headers: mergedHeaders,
+    headers: message.headers,
   };
 
-  logger.info(
-    {
-      module: "smtp",
-      testRecipientMode: true,
-      envelopeTo: safeTo,
-      intendedTo: originalTo,
-      subject: message.subject,
-    },
-    "Sending email (test recipient mode)",
+  logger.debug(
+    { module: "smtp", to: message.to, subject: message.subject },
+    "Sending email",
   );
 
   const info = await t.sendMail(mailOptions);
 
   logger.info(
-    {
-      module: "smtp",
-      envelopeTo: safeTo,
-      intendedTo: originalTo,
-      messageId: info.messageId,
-    },
+    { module: "smtp", to: message.to, messageId: info.messageId },
     "Email sent successfully",
   );
 
@@ -230,17 +150,8 @@ export async function forwardReplyForReview(
 /**
  * Verifies the SMTP connection and auth credentials.
  * Returns true if the server is reachable and accepts the login.
- * Skipped in simulated_send mode so local runs work without real SMTP credentials.
  */
 export async function verifyConnection(): Promise<boolean> {
-  if (config.app.emailMode === "simulated_send") {
-    logger.info(
-      { module: "smtp", emailMode: config.app.emailMode },
-      "SMTP verification skipped (simulated send — no outbound SMTP)",
-    );
-    return true;
-  }
-
   try {
     const t = getTransporter();
     await t.verify();

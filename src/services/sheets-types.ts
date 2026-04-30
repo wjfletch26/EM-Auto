@@ -133,51 +133,6 @@ export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
   pipelineStatus: 'X',
 };
 
-/**
- * Operator-editable contact columns (names, company, URL, campaign, notes).
- * Email (column A) is not included — use append only; changing PK is unsupported here.
- */
-export interface ContactProfileUpdate {
-  firstName: string;
-  lastName: string;
-  company: string;
-  title: string;
-  campaignId: string;
-  custom1: string;
-  custom2: string;
-  notes: string;
-  companyUrl: string;
-}
-
-/** Maps ContactProfileUpdate fields to Contacts tab column letters (see getContacts). */
-export const PROFILE_FIELD_TO_COLUMN: Record<keyof ContactProfileUpdate, string> = {
-  firstName: 'B',
-  lastName: 'C',
-  company: 'D',
-  title: 'E',
-  campaignId: 'F',
-  custom1: 'T',
-  custom2: 'U',
-  notes: 'V',
-  companyUrl: 'W',
-};
-
-/** Payload for appending a new contact row (email + first name required). */
-export interface ContactAppendPayload {
-  email: string;
-  firstName: string;
-  lastName?: string;
-  company?: string;
-  title?: string;
-  campaignId?: string;
-  custom1?: string;
-  custom2?: string;
-  notes?: string;
-  companyUrl?: string;
-  /** Initial pipeline_status (column X). Default `new`. */
-  pipelineStatus?: string;
-}
-
 // ─── Company Intelligence Tab Types ──────────────────────────────────────────
 
 /** A row from the Company Intelligence tab. */
@@ -204,7 +159,7 @@ export interface CompanyIntelligence {
   _rowIndex: number;
 }
 
-/** Fields the pipeline (and admin UI) can update on a Company Intelligence row. */
+/** Fields the pipeline can update on a Company Intelligence row. */
 export interface CompanyIntelUpdate {
   companyName: string;
   industry: string;
@@ -216,7 +171,7 @@ export interface CompanyIntelUpdate {
   caseStudiesSelected: string;
   alignmentRationale: string;
   confidenceScore: string;
-  /** Column M — operator / David notes passed into email generation. */
+  /** Column M — operator / David context fed into QC and regeneration. */
   davidProjectNotes: string;
   executiveBrief: string;
   pipelineStatus: string;

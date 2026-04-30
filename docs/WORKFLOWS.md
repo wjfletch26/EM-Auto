@@ -6,7 +6,7 @@ This document describes every operational workflow in the system, step by step. 
 
 ## Workflow 1: Send Cycle
 
-**Trigger**: Cron scheduler, every 5 minutes (when `SCHEDULER_ENABLED` is true). The same send engine also runs on **`POST /api/admin/actions/send-cycle`** when `ADMIN_API_KEY` is set—used for manual runs when the scheduler is off or for on-demand retries.
+**Trigger**: Cron scheduler, every 5 minutes.
 
 **Preconditions**:
 - Google Sheets contains contacts and campaign data.

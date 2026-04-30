@@ -45,19 +45,6 @@ curl -s -o /dev/null -w "%{http_code}" https://unsub.deatonengineering.us/health
 
 Expected: `200`. If not: check Caddy status (`sudo systemctl status caddy`).
 
-### Admin UI and API (optional)
-
-When `ADMIN_API_KEY` is set in `.env` and the app was built with `npm run build` (includes the Vite app under `dist/admin/`):
-
-- **Browser**: open `https://<your-public-host>/admin/` (same host you use for unsubscribe, e.g. `UNSUB_BASE_URL` without a trailing path). The server redirects `/` to `/admin/` when the admin UI is enabled.
-- **JSON API**: all routes are under `/api/admin/`. Authenticate with `Authorization: Bearer <ADMIN_API_KEY>` or `X-Admin-Key: <ADMIN_API_KEY>`.
-
-From the UI or API you can list and edit Sheets-backed contacts, company intelligence, and the review queue, and run **send cycle**, **pipeline cycle**, and **approval watcher** on demand. This is the primary way to drive those jobs when `SCHEDULER_ENABLED` is false (typical local/staging default).
-
-If `ADMIN_API_KEY` is unset, `/api/admin/*` returns **503** and the SPA is not served—by design.
-
-Details: [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md), [SECURITY.md](./SECURITY.md).
-
 ### Are emails being sent?
 
 Check the "Send Log" tab in Google Sheets. The most recent row should have today's date (if there are eligible contacts).

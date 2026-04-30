@@ -7,10 +7,7 @@
 
 import { logger } from '../logging/logger.js';
 import * as sheets from '../services/sheets.js';
-import type { ContactUpdate, ReviewQueueEntry } from '../services/sheets-types.js';
-
-const REQUIRED_APPROVED_STEPS = 12;
-let approvalWatcherRunning = false;
+import type { ReviewQueueEntry } from '../services/sheets-types.js';
 
 /**
  * Runs a single approval check cycle. Called by the cron scheduler.
@@ -22,13 +19,6 @@ let approvalWatcherRunning = false;
  * 4. Mark review queue rows with the campaign_id
  */
 export async function runApprovalWatcherCycle(): Promise<void> {
-  if (approvalWatcherRunning) {
-    logger.debug({ module: 'approval-watcher' }, 'Approval watcher cycle skipped: previous run in progress');
-    return;
-  }
-
-  approvalWatcherRunning = true;
-
   try {
     const [reviewQueue, contacts] = await Promise.all([
       sheets.getReviewQueue(),
@@ -39,38 +29,22 @@ export async function runApprovalWatcherCycle(): Promise<void> {
     const byEmail = new Map<string, ReviewQueueEntry[]>();
     for (const entry of reviewQueue) {
       if (!entry.contactEmail) continue;
-      // Superseded drafts (e.g. after admin "regenerate sequence") must not count toward approval.
-      if (entry.status === 'superseded') continue;
       const list = byEmail.get(entry.contactEmail) || [];
       list.push(entry);
       byEmail.set(entry.contactEmail, list);
     }
 
-    // Find contacts where all 12 steps are approved and no campaign_id assigned yet
+    // Find contacts where all 12 emails are approved and no campaign_id assigned yet
     for (const [email, entries] of byEmail) {
       const approved = entries.filter((e) => e.status === 'approved');
       const alreadyLoaded = entries.some((e) => e.campaignId);
 
-      if (alreadyLoaded) continue;
-
-      const validated = validateApprovedSteps(approved);
-      if (!validated.ok) {
-        logger.warn({ module: 'approval-watcher', email, reason: validated.reason }, 'Skipping campaign creation');
-        continue;
-      }
+      if (approved.length < 12 || alreadyLoaded) continue;
 
       // All 12 approved and not yet loaded — create campaign
       const contact = contacts.find((c) => c.email === email);
       if (!contact) {
         logger.warn({ module: 'approval-watcher', email }, 'Contact not found for approved emails');
-        continue;
-      }
-
-      if (contact.campaignId?.trim()) {
-        logger.info(
-          { module: 'approval-watcher', email, campaignId: contact.campaignId },
-          'Contact already has campaign_id — skipping re-assignment',
-        );
         continue;
       }
 
@@ -80,20 +54,24 @@ export async function runApprovalWatcherCycle(): Promise<void> {
       const slug = contact.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
       const campaignId = `ai_${slug}_${Date.now()}`;
 
-      // Use explicit step lookup to guarantee consistent 1..12 ordering.
-      const sorted = Array.from({ length: REQUIRED_APPROVED_STEPS }, (_v, idx) => validated.stepMap.get(idx + 1)!);
+      // Sort entries by step number for correct ordering
+      const sorted = [...approved].sort((a, b) => a.stepNumber - b.stepNumber);
 
       // Build the campaign row values (up to 12 steps × 3 cols each)
       // Format: id, name, total_steps, [step_N_template, step_N_subject, step_N_delay_days] × 12, active, campaign_type
       const stepValues: string[] = [];
-      for (let s = 0; s < REQUIRED_APPROVED_STEPS; s++) {
+      for (let s = 0; s < 12; s++) {
         const entry = sorted[s];
-        // For AI-generated campaigns, the template field stores a reference key
-        stepValues.push(
-          `ai_review_queue:${entry._rowIndex}`,
-          entry.subject.trim(),
-          s === 0 ? '0' : '30', // First step immediate, rest use 30-day cadence
-        );
+        if (entry) {
+          // For AI-generated campaigns, the template field stores a reference key
+          stepValues.push(
+            `ai_review_queue:${entry._rowIndex}`,
+            entry.subject,
+            s === 0 ? '0' : '30', // First step immediate, rest use 30-day cadence
+          );
+        } else {
+          stepValues.push('', '', '');
+        }
       }
 
       // Build full row: campaign_id, name, total_steps, ...steps, active, campaign_type
@@ -125,9 +103,20 @@ export async function runApprovalWatcherCycle(): Promise<void> {
       }
 
       // Update the contact to use the new campaign and mark as ready
-      // Keep sequence progress intact. We only need pipeline + campaign assignment.
-      await sheets.updateContact(email, contact._rowIndex, buildApprovalContactUpdate());
-      await sheets.updateContactProfile(email, contact._rowIndex, { campaignId });
+      await sheets.updateContact(email, contact._rowIndex, {
+        status: 'new',
+        lastStepSent: 0,
+        pipelineStatus: 'approved',
+      });
+
+      // Also update the campaignId on the contact row directly
+      const directSheets = await getSheetsClientForAppend();
+      await directSheets.spreadsheets.values.update({
+        spreadsheetId: getSpreadsheetId(),
+        range: `Contacts!F${contact._rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[campaignId]] },
+      });
 
       logger.info(
         { module: 'approval-watcher', email, campaignId },
@@ -137,71 +126,7 @@ export async function runApprovalWatcherCycle(): Promise<void> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ module: 'approval-watcher', error: msg }, 'Approval watcher cycle failed');
-  } finally {
-    approvalWatcherRunning = false;
   }
-}
-
-export interface ApprovedValidationResult {
-  ok: boolean;
-  reason?: string;
-  stepMap: Map<number, ReviewQueueEntry>;
-}
-
-/**
- * Contact fields that should change when approvals become send-ready.
- * We intentionally do not reset status/step progress here.
- */
-export function buildApprovalContactUpdate(): Partial<ContactUpdate> {
-  return { pipelineStatus: 'approved' };
-}
-
-/**
- * Require exactly one approved entry for every step 1..12 and non-empty subject/body.
- * This prevents malformed sequences and duplicate-step loads.
- */
-export function validateApprovedSteps(approved: ReviewQueueEntry[]): ApprovedValidationResult {
-  const stepMap = new Map<number, ReviewQueueEntry>();
-  const duplicateSteps = new Set<number>();
-
-  for (const entry of approved) {
-    const step = entry.stepNumber;
-    if (!Number.isInteger(step) || step < 1 || step > REQUIRED_APPROVED_STEPS) {
-      return { ok: false, reason: `Invalid step number ${String(step)}`, stepMap };
-    }
-    if (stepMap.has(step)) {
-      duplicateSteps.add(step);
-      continue;
-    }
-    stepMap.set(step, entry);
-  }
-
-  if (duplicateSteps.size > 0) {
-    return {
-      ok: false,
-      reason: `Duplicate approved steps: ${Array.from(duplicateSteps).sort((a, b) => a - b).join(', ')}`,
-      stepMap,
-    };
-  }
-
-  for (let step = 1; step <= REQUIRED_APPROVED_STEPS; step++) {
-    const entry = stepMap.get(step);
-    if (!entry) {
-      return { ok: false, reason: `Missing approved step ${step}`, stepMap };
-    }
-    if (!entry.subject?.trim()) {
-      return { ok: false, reason: `Blank subject for step ${step}`, stepMap };
-    }
-    if (!entry.body?.trim()) {
-      return { ok: false, reason: `Blank body for step ${step}`, stepMap };
-    }
-  }
-
-  if (approved.length !== REQUIRED_APPROVED_STEPS) {
-    return { ok: false, reason: 'Approved row count does not equal 12', stepMap };
-  }
-
-  return { ok: true, stepMap };
 }
 
 // ─── Helpers for direct Sheets access ────────────────────────────────────────

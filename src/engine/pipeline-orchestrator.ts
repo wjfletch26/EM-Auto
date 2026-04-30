@@ -16,9 +16,9 @@ import { createPerplexityProvider, createLLMProvider, type LLMProvider } from '.
 import { researchCompany, type CompanyProfile } from '../skills/company-research.js';
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
 import { generateEmailSequence } from '../skills/email-generator.js';
-import type { Contact, CompanyIntelligence, ReviewQueueEntry } from '../services/sheets-types.js';
 import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
 import { runFullMergedQC } from './email-qc-runner.js';
+import type { Contact, CompanyIntelligence } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
 
 // ─── Mutex ───────────────────────────────────────────────────────────────────
@@ -28,7 +28,6 @@ let pipelineRunning = false;
 // ─── Max retries for failed stages ───────────────────────────────────────────
 
 const MAX_RETRIES = 3;
-const REQUIRED_SEQUENCE_STEPS = 12;
 const MAX_AUTO_REGEN_ROUNDS = 2;
 
 // ─── Main Pipeline Cycle ─────────────────────────────────────────────────────
@@ -202,17 +201,6 @@ async function processEmailGeneration(
   const log = { module: 'pipeline', email: contact.email, company: contact.company };
 
   try {
-    // Idempotency guard: do not generate twice if an unsent sequence already exists.
-    const reviewQueue = await sheets.getReviewQueue();
-    if (hasExistingUnloadedSequence(contact.email, reviewQueue)) {
-      logger.warn(
-        { ...log },
-        'Unsent 12-step review queue sequence already exists; skipping regeneration',
-      );
-      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'pending_review' });
-      return;
-    }
-
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generating' });
 
     // Reconstruct the company profile from intel data
@@ -363,15 +351,14 @@ async function processEmailGeneration(
       const notes = emailReview && !emailReview.pass
         ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
         : '';
-      const subject = normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company);
 
       return {
         contactEmail: contact.email,
         companyName: intel.companyName,
         stepNumber: email.step,
         emailPurpose: email.purpose,
-        subject,
-        body: normalizeGreetingBody(email.body, contact.firstName),
+        subject: email.subject,
+        body: email.body,
         status: 'pending_review',
         reviewerNotes: notes,
         generatedDate: now,
@@ -453,71 +440,4 @@ function safeParseJSON<T>(str: string, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-/**
- * Returns true when contact already has an unassigned, unsuperseded 12-step review batch.
- * This prevents duplicate generation when retries or overlapping runs occur.
- */
-export function hasExistingUnloadedSequence(
-  contactEmail: string,
-  reviewQueue: ReviewQueueEntry[],
-): boolean {
-  const target = contactEmail.trim().toLowerCase();
-  const rows = reviewQueue.filter(
-    (r) => r.contactEmail === target && !r.campaignId?.trim() && r.status !== 'superseded',
-  );
-  if (rows.length < REQUIRED_SEQUENCE_STEPS) return false;
-
-  const uniqueSteps = new Set(rows.map((r) => r.stepNumber).filter((s) => s >= 1 && s <= REQUIRED_SEQUENCE_STEPS));
-  return uniqueSteps.size === REQUIRED_SEQUENCE_STEPS;
-}
-
-/**
- * Normalizes generated subject and provides a safe fallback when models return empty subjects.
- */
-export function normalizeGeneratedSubject(
-  subject: string,
-  purpose: string,
-  step: number,
-  company: string,
-): string {
-  const trimmed = (subject || '').trim();
-  if (trimmed && !/^\(no subject\)$/i.test(trimmed)) return trimmed;
-
-  const purposeTrimmed = (purpose || '').trim();
-  if (purposeTrimmed) {
-    return `${purposeTrimmed} - ${company}`.slice(0, 90);
-  }
-  return `Quick question about ${company} (step ${step})`.slice(0, 90);
-}
-
-/**
- * Ensures greeting names are on their own line in queued drafts:
- * "Simon, scaling..." -> "Simon,\n\nscaling..."
- */
-export function normalizeGreetingBody(body: string, firstName: string): string {
-  const trimmedBody = (body || '').trimStart();
-  const name = (firstName || '').trim();
-
-  if (name) {
-    const exactPattern = new RegExp(`^(${escapeRegex(name)}),\\s*([\\s\\S]+)$`, 'i');
-    const exactMatch = trimmedBody.match(exactPattern);
-    if (exactMatch) {
-      return `${exactMatch[1]},\n\n${exactMatch[2].trim()}`;
-    }
-  }
-
-  const genericMatch = trimmedBody.match(
-    /^([A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,2}),\s*([\s\S]+)$/,
-  );
-  if (genericMatch) {
-    return `${genericMatch[1]},\n\n${genericMatch[2].trim()}`;
-  }
-
-  return body;
-}
-
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

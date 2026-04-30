@@ -15,7 +15,6 @@ import {
 } from './knowledge-loader.js';
 import type { CompanyProfile } from './company-research.js';
 import type { AlignmentResult } from './deaton-alignment.js';
-import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 
 // ─── Output Schema ───────────────────────────────────────────────────────────
 
@@ -129,12 +128,5 @@ export async function generateEmailSequence(
     'Email sequence generation complete',
   );
 
-  // Enforce no em dashes in subjects or bodies (see prompts/email-generation.md).
-  return {
-    emails: result.data.emails.map((e) => ({
-      ...e,
-      subject: replaceEmDashesWithPlainHyphen(e.subject),
-      body: replaceEmDashesWithPlainHyphen(e.body),
-    })),
-  };
+  return result.data;
 }

@@ -3,21 +3,19 @@
  *
  * Startup flow:
  * 1) Validate and log config
- * 2) Verify SMTP connection (skipped when email mode is simulated send)
+ * 2) Verify SMTP connection
  * 3) Start web server
- * 4) Start scheduler when SCHEDULER_ENABLED / APP_ENV allows it
+ * 4) Start scheduler
  *
  * Shutdown flow:
  * - Stop scheduler
  * - Close web server
  * - Close SMTP connection
  */
+import path from "node:path";
 import type { Server } from "node:http";
-import {
-  config,
-  getRedactedConfig,
-  getStartupEnvironmentSummary,
-} from "./config/index.js";
+import { fileURLToPath } from "node:url";
+import { config, getRedactedConfig } from "./config/index.js";
 import { logger, cleanOldLogs } from "./logging/logger.js";
 import { verifyConnection, disconnect } from "./services/smtp.js";
 import { startWebServer } from "./web/server.js";
@@ -46,11 +44,6 @@ export async function startApplication(): Promise<void> {
   cleanOldLogs();
 
   logger.info(
-    { module: "main", ...getStartupEnvironmentSummary() },
-    "Runtime environment",
-  );
-
-  logger.info(
     { module: "main", config: getRedactedConfig() },
     "Configuration loaded",
   );
@@ -61,28 +54,7 @@ export async function startApplication(): Promise<void> {
   }
 
   server = startWebServer(config.unsub.port);
-
-  if (config.app.schedulerEnabled) {
-    scheduler = startScheduler();
-    logger.info(
-      {
-        module: "main",
-        scheduler: "started",
-        schedulerEnabled: true,
-      },
-      "Scheduler started",
-    );
-  } else {
-    logger.info(
-      {
-        module: "main",
-        scheduler: "skipped",
-        schedulerEnabled: false,
-        appEnv: config.app.appEnv,
-      },
-      "Scheduler disabled (manual/admin triggers only)",
-    );
-  }
+  scheduler = startScheduler();
 
   logger.info({ module: "main" }, "Application started");
 }
@@ -139,3 +111,14 @@ startApplication().catch((err: unknown) => {
   );
   process.exit(1);
 });
+
+// const isDirectRun = process.argv[1] !== undefined
+//   && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
+
+// if (isDirectRun) {
+//   startApplication().catch((err: unknown) => {
+//     const message = err instanceof Error ? err.message : String(err);
+//     logger.error({ module: 'main', error: message }, 'Application failed to start');
+//     process.exit(1);
+//   });
+// }

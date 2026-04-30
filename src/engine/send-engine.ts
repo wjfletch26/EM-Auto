@@ -24,9 +24,7 @@ import {
   type PendingContact,
 } from '../state/local-store.js';
 import type { Contact, Campaign, CampaignStep, ReviewQueueEntry } from '../services/sheets-types.js';
-import { embedOutboundSignatureHtml } from '../content/email-signature.js';
-import { stripTrailingInformalSignoff } from '../content/body-signoff-strip.js';
-import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
+import { EMAIL_SIGNATURE_PLAIN } from '../constants/email-signature.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,75 +69,6 @@ function stripHtml(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-export interface AIDraftValidationResult {
-  ok: boolean;
-  subject: string;
-  bodyPlain: string;
-  reason?: string;
-}
-
-/**
- * Normalizes AI subject/body and enforces non-empty send-safe content.
- */
-export function validateAndNormalizeAIDraft(
-  queueSubject: string,
-  queueBody: string,
-  fallbackStepSubject: string,
-  contactFirstName: string,
-): AIDraftValidationResult {
-  const subject = replaceEmDashesWithPlainHyphen((queueSubject || '').trim())
-    || replaceEmDashesWithPlainHyphen((fallbackStepSubject || '').trim());
-
-  if (!subject) {
-    return { ok: false, subject: '', bodyPlain: '', reason: 'blank_subject' };
-  }
-
-  const normalizedBody = replaceGreetingLineBreak(
-    (queueBody || '').trim(),
-    contactFirstName,
-  );
-  const bodyPlain = replaceEmDashesWithPlainHyphen(
-    stripTrailingInformalSignoff(normalizedBody),
-  );
-  if (!bodyPlain.trim()) {
-    return { ok: false, subject, bodyPlain: '', reason: 'blank_body' };
-  }
-
-  return { ok: true, subject, bodyPlain };
-}
-
-/**
- * Ensures greeting is on its own line for better readability:
- * "Thomas, rest..." -> "Thomas,\n\nrest..."
- */
-export function replaceGreetingLineBreak(body: string, firstName: string): string {
-  const trimmedBody = body.trimStart();
-  const name = (firstName || '').trim();
-
-  // First preference: explicit contact first-name match.
-  if (name) {
-    const exactPattern = new RegExp(`^(${escapeRegex(name)}),\\s+([\\s\\S]+)$`, 'i');
-    const exactMatch = trimmedBody.match(exactPattern);
-    if (exactMatch) {
-      return `${exactMatch[1]},\n\n${exactMatch[2].trim()}`;
-    }
-  }
-
-  // Fallback: generic leading-name greeting, e.g. "Simon, ..." / "Mary Ann, ...".
-  const genericMatch = trimmedBody.match(
-    /^([A-Z][A-Za-z.'-]{1,30}(?:\s+[A-Z][A-Za-z.'-]{1,30}){0,2}),\s+([\s\S]+)$/,
-  );
-  if (genericMatch) {
-    return `${genericMatch[1]},\n\n${genericMatch[2].trim()}`;
-  }
-
-  return body;
-}
-
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -264,34 +193,15 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
             updatePendingStatus(pendingContacts, i, 'failed');
             continue;
           }
-          const normalizedDraft = validateAndNormalizeAIDraft(
-            resolved.subject,
-            resolved.body,
-            step.subject,
-            contact.firstName,
-          );
-          if (!normalizedDraft.ok) {
-            logger.error(
-              {
-                module: 'send-engine',
-                email: contact.email,
-                step: step.stepNumber,
-                reason: normalizedDraft.reason,
-              },
-              'AI email failed subject/body validation; skipping send',
-            );
-            skipped++;
-            updatePendingStatus(pendingContacts, i, 'failed');
-            continue;
-          }
-          subject = normalizedDraft.subject;
-
-          // Body is pre-cleaned by validateAndNormalizeAIDraft.
-          const bodyPlain = normalizedDraft.bodyPlain;
-          // AI emails are plain text — wrap in simple HTML; signature + footer added below (same as templates).
-          html = `<p>${bodyPlain.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+          // AI emails: body from Review Queue + system signature + compliance footer.
+          const bodyHtml = `<p>${resolved.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
+          const sigHtml = `<p>${EMAIL_SIGNATURE_PLAIN.replace(/\n/g, '<br>')}</p>`;
+          html = `${bodyHtml}${sigHtml}`
             + `<hr><p style="font-size:11px;color:#999;">${config.app.physicalAddress}<br>`
             + `<a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
+          subject = resolved.subject;
+          const textBody = `${resolved.body}\n\n${EMAIL_SIGNATURE_PLAIN}`;
+          text = `${textBody}\n\n${config.app.physicalAddress}\nUnsubscribe: ${unsubscribeUrl}`;
         } else {
           // Template-based campaign — existing Handlebars path
           const templateSource = loadTemplate(step.templateFile);
@@ -314,20 +224,8 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
 
           html = Handlebars.compile(templateSource)(context);
           subject = Handlebars.compile(step.subject)(context);
-          if (!subject.trim()) {
-            logger.error(
-              { module: 'send-engine', email: contact.email, step: step.stepNumber, campaignId: campaign.campaignId },
-              'Template subject rendered blank; skipping send',
-            );
-            skipped++;
-            updatePendingStatus(pendingContacts, i, 'failed');
-            continue;
-          }
+          text = stripHtml(html);
         }
-
-        // David Knieriem card + tagline on every outbound message (before CAN-SPAM hr block).
-        html = embedOutboundSignatureHtml(html);
-        text = stripHtml(html);
 
         // Update pending state to "sending"
         updatePendingStatus(pendingContacts, i, 'sending');

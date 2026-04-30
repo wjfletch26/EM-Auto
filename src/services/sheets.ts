@@ -11,22 +11,20 @@ import { google, type sheets_v4 } from 'googleapis';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import type {
-  Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
+  Contact, ContactUpdate, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 } from './sheets-types.js';
 import {
   FIELD_TO_COLUMN,
-  PROFILE_FIELD_TO_COLUMN,
   INTEL_FIELD_TO_COLUMN,
   REVIEW_FIELD_TO_COLUMN,
 } from './sheets-types.js';
 
 // Re-export types so consumers only need one import
 export type {
-  Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
-  SendLogEntry, ReplyLogEntry,
+  Contact, ContactUpdate, Campaign, SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 };
@@ -75,13 +73,6 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
     }
   }
   throw new Error('withRetry: unreachable');
-}
-
-/** Converts values for RAW Sheets writes (booleans → TRUE/FALSE). */
-function toSheetCell(value: unknown): string | number {
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-  if (typeof value === 'number') return value;
-  return value === null || value === undefined ? '' : String(value);
 }
 
 // ─── Read operations ─────────────────────────────────────────────────────────
@@ -244,7 +235,7 @@ export async function updateContact(
   for (const [field, value] of Object.entries(updates)) {
     const col = FIELD_TO_COLUMN[field as keyof ContactUpdate];
     if (!col) continue;
-    data.push({ range: `Contacts!${col}${rowIndex}`, values: [[toSheetCell(value)]] });
+    data.push({ range: `Contacts!${col}${rowIndex}`, values: [[contactCellValue(value)]] });
   }
 
   if (data.length === 0) return;
@@ -270,7 +261,7 @@ export async function batchUpdateContacts(
     for (const [field, value] of Object.entries(fields)) {
       const col = FIELD_TO_COLUMN[field as keyof ContactUpdate];
       if (!col) continue;
-      data.push({ range: `Contacts!${col}${rowIndex}`, values: [[toSheetCell(value)]] });
+      data.push({ range: `Contacts!${col}${rowIndex}`, values: [[contactCellValue(value)]] });
     }
   }
 
@@ -284,154 +275,6 @@ export async function batchUpdateContacts(
   );
 
   logger.info({ module: 'sheets', count: updates.length }, 'Batch contact update complete');
-}
-
-/**
- * Updates operator-editable contact columns (B–F, T–W).
- * Does not change email (column A); use appendContact for new rows.
- */
-export async function updateContactProfile(
-  email: string,
-  rowIndex: number,
-  updates: Partial<ContactProfileUpdate>,
-): Promise<void> {
-  const sheets = await getClient();
-  const data: sheets_v4.Schema$ValueRange[] = [];
-
-  for (const [field, value] of Object.entries(updates)) {
-    const col = PROFILE_FIELD_TO_COLUMN[field as keyof ContactProfileUpdate];
-    if (!col) continue;
-    data.push({ range: `Contacts!${col}${rowIndex}`, values: [[toSheetCell(value)]] });
-  }
-
-  if (data.length === 0) return;
-
-  await withRetry(() =>
-    sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: { valueInputOption: 'RAW', data },
-    })
-  );
-
-  logger.info({ module: 'sheets', email, fields: Object.keys(updates) }, 'Contact profile updated');
-}
-
-/**
- * Appends a new contact row. Fails if the email already exists (case-insensitive).
- */
-export async function appendContact(payload: ContactAppendPayload): Promise<void> {
-  const email = payload.email.trim().toLowerCase();
-  if (!email || !email.includes('@')) {
-    throw new Error('appendContact: valid email is required');
-  }
-  const firstName = payload.firstName?.trim();
-  if (!firstName) {
-    throw new Error('appendContact: firstName is required');
-  }
-
-  const existing = await getContacts();
-  if (existing.some((c) => c.email === email)) {
-    throw new Error(`appendContact: duplicate email ${email}`);
-  }
-
-  const row: (string | number)[] = [
-    email,
-    firstName,
-    payload.lastName?.trim() ?? '',
-    payload.company?.trim() ?? '',
-    payload.title?.trim() ?? '',
-    payload.campaignId?.trim() ?? '',
-    'new',
-    0,
-    '',
-    '',
-    '',
-    '',
-    'FALSE',
-    '',
-    '',
-    'FALSE',
-    '',
-    '',
-    0,
-    payload.custom1?.trim() ?? '',
-    payload.custom2?.trim() ?? '',
-    payload.notes?.trim() ?? '',
-    payload.companyUrl?.trim() ?? '',
-    payload.pipelineStatus?.trim() || 'new',
-  ];
-
-  const sheets = await getClient();
-  await withRetry(() =>
-    sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'Contacts!A:X',
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [row] },
-    })
-  );
-
-  logger.info({ module: 'sheets', email }, 'Contact row appended');
-}
-
-/**
- * Soft-delete: marks do_not_contact and appends an archive line to notes (does not remove the row).
- */
-export async function softDeleteContact(email: string, rowIndex: number): Promise<void> {
-  const contacts = await getContacts();
-  const contact = contacts.find((c) => c.email === email && c._rowIndex === rowIndex);
-  if (!contact) {
-    throw new Error(`softDeleteContact: contact not found for ${email} row ${rowIndex}`);
-  }
-
-  const archiveLine = `[archived ${new Date().toISOString().slice(0, 10)}]`;
-  const newNotes = contact.notes ? `${contact.notes}\n${archiveLine}` : archiveLine;
-
-  const sheets = await getClient();
-  const data: sheets_v4.Schema$ValueRange[] = [
-    { range: `Contacts!G${rowIndex}`, values: [['do_not_contact']] },
-    { range: `Contacts!V${rowIndex}`, values: [[newNotes]] },
-  ];
-
-  await withRetry(() =>
-    sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: { valueInputOption: 'RAW', data },
-    })
-  );
-
-  logger.info({ module: 'sheets', email }, 'Contact soft-deleted (do_not_contact)');
-}
-
-/**
- * Sets Review Queue status to `superseded` for all rows for this contact that have no campaign_id yet.
- * Used before regenerating AI sequences so old drafts are not confused with the new batch.
- */
-export async function markReviewQueueSupersededForContact(contactEmail: string): Promise<number> {
-  const normalized = contactEmail.trim().toLowerCase();
-  const queue = await getReviewQueue();
-  const targets = queue.filter(
-    (e) => e.contactEmail === normalized && !e.campaignId?.trim() && e.status !== 'superseded',
-  );
-
-  if (targets.length === 0) return 0;
-
-  const sheets = await getClient();
-  const data: sheets_v4.Schema$ValueRange[] = targets.map((e) => ({
-    range: `'Review Queue'!G${e._rowIndex}`,
-    values: [['superseded']],
-  }));
-
-  await withRetry(() =>
-    sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: { valueInputOption: 'RAW', data },
-    })
-  );
-
-  logger.info({ module: 'sheets', email: normalized, count: targets.length }, 'Review queue rows superseded');
-  return targets.length;
 }
 
 /** Appends a row to the Send Log tab. */
