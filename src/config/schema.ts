@@ -143,6 +143,7 @@ const configSchemaBase = z.object({
   pipeline: pipelineSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,
+  dashboard: dashboardSchema,
 });
 
 function deriveEmailMode(

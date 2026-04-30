@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import { createRateLimiterMiddleware } from '../utils/rate-limiter.js';
+import { createDashboardRouter } from './routes/dashboard-router.js';
 import { unsubscribeHandler } from './routes/unsubscribe.js';
 import { requireAdminApiKey } from './middleware/admin-auth.js';
 import { createAdminRouter } from './routes/admin/router.js';
@@ -30,8 +31,13 @@ export function startWebServer(port = config.unsub.port): Server {
   const app = express();
   const unsubscribeRateLimiter = createRateLimiterMiddleware();
 
+  const publicRoot = path.join(process.cwd(), 'public');
+
+  app.get('/', rootHandler);
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
+  app.use('/api/dashboard', createDashboardRouter());
+  app.use('/dashboard', express.static(path.join(publicRoot, 'dashboard'), { index: 'index.html' }));
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
