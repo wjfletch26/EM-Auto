@@ -5,6 +5,40 @@ Use it when you want to quickly verify the system still works.
 
 ---
 
+## 0) Local Test Spreadsheet Mode (Recommended)
+
+Use this mode to test safely against a sandbox sheet before deploying to VPS.
+
+1. Create a test spreadsheet copy in Google Sheets.
+2. Share it with the service account in `credentials/service-account.json`.
+3. Create a local-only `.env.local` file (gitignored) with:
+
+```bash
+GOOGLE_SPREADSHEET_ID=<TEST_SPREADSHEET_ID>
+TEST_RECIPIENT=<your-email>
+LOG_LEVEL=debug
+```
+
+How it works:
+
+- The app loads `.env` first.
+- If `.env.local` exists, it overrides matching values for local runs only.
+- VPS behavior is unchanged unless you also create `.env.local` on the VPS.
+
+Suggested local flow:
+
+```bash
+npm run build
+npm test
+npm run dev:local
+npx tsx scripts/test-send-cycle.ts
+```
+
+Verify that updates appear in the **test** spreadsheet, not production.
+When finished, delete or rename `.env.local` to return to default `.env` values.
+
+---
+
 ## 1) Fast Validation (Most Common)
 
 Run these commands from the project root:
@@ -154,3 +188,34 @@ Expected result:
 - Forward email is sent to `REPLY_FORWARD_TO` from `.env`.
 - Contact row is updated to `status=paused`.
 - Contact `reply_status` is set to `forwarded`.
+
+---
+
+## 8) Admin API and UI (optional)
+
+Requires `ADMIN_API_KEY` in `.env` and a successful `npm run build` (produces `dist/admin/` for the SPA).
+
+1. Start the app (`npm run dev` or `npm start` after build).
+2. **Health** (unchanged):
+
+```bash
+curl -s "http://127.0.0.1:3000/health"
+```
+
+3. **Admin without key** — expect `401` when the key is set, `503` when admin is disabled (empty key):
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:3000/api/admin/contacts"
+```
+
+4. **Admin with key** — expect `200` and JSON with a `contacts` array (may be empty):
+
+```bash
+curl -s -H "Authorization: Bearer $ADMIN_API_KEY" "http://127.0.0.1:3000/api/admin/contacts" | head -c 500
+```
+
+(`X-Admin-Key: $ADMIN_API_KEY` is equivalent.)
+
+5. **SPA**: when `ADMIN_UI_ENABLED` is true (default with a key), open `http://127.0.0.1:3000/admin/` in a browser. Paste the same value as `ADMIN_API_KEY` from `.env`, click **Save key** (stored in this browser as `localStorage`), then use **Refresh** and the action buttons.
+
+Avoid running destructive admin actions (`send-cycle`, `pipeline-cycle`, etc.) against production unless intended; use a test spreadsheet and `APP_ENV=local` per section 0.
