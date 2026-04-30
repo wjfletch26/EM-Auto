@@ -12,6 +12,9 @@ You MUST return valid JSON matching the schema described below. Do not include a
 7. **Subject Lines**: Are they under 60 characters and free of spam triggers?
 8. **Sign-off hygiene**: The send system appends the real signature. Flag any email that still ends with a formal closing (Best, Sincerely, etc.), placeholder text like [Your Name], or a standalone "Deaton Engineering" signature line — those should be removed so only one signature appears when sent.
 9. **Typography**: Flag any em dash character (—) in subject or body. Generated copy must use commas, semicolons, or spaced hyphens instead.
+10. **Case studies**: Only case studies listed in the alignment JSON should appear as named proof. Flag references to other named Deaton clients or invented studies.
+11. **David's project notes**: If non-empty notes are provided, at least several emails (especially proof-heavy steps) should clearly reflect them; flag if they are ignored.
+12. **Sequence plan**: Each step should match the purpose and content focus described in the email structure for that step number (intro vs proof vs breakup, etc.).
 
 JSON Schema:
 {
@@ -44,6 +47,15 @@ Review the following 12-email outreach sequence for quality.
 
 ## Persona Used:
 {{persona}}
+
+## Alignment (selected capabilities and case studies — authoritative for proof):
+{{alignment_json}}
+
+## David's Project Notes (must influence copy when non-empty):
+{{david_project_notes}}
+
+## Planned 12-Step Structure (check each email fits its step):
+{{email_structure}}
 
 Instructions:
 1. Evaluate each email against all criteria listed above.

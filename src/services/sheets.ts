@@ -14,7 +14,7 @@ import type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
-  ReviewQueueEntry, ReviewQueueUpdate,
+  ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 } from './sheets-types.js';
 import {
   FIELD_TO_COLUMN,
@@ -28,7 +28,7 @@ export type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
-  ReviewQueueEntry, ReviewQueueUpdate,
+  ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 };
 
 // ─── Singleton Sheets client ─────────────────────────────────────────────────
@@ -217,6 +217,20 @@ export async function getSendLog(): Promise<SendLogEntry[]> {
 }
 
 // ─── Write operations ────────────────────────────────────────────────────────
+
+/** Normalizes values so Google Sheets shows booleans and numbers predictably. */
+function contactCellValue(value: unknown): string | number {
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value === 'number') return value;
+  return value === null || value === undefined ? '' : String(value);
+}
+
+/** Normalizes values for Review Queue updates. */
+function reviewQueueCellValue(value: unknown): string | number {
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value === 'number') return value;
+  return value === null || value === undefined ? '' : String(value);
+}
 
 /** Updates specific fields on a contact row identified by email. */
 export async function updateContact(
@@ -550,7 +564,7 @@ export async function updateCompanyIntelligence(
 export async function getReviewQueue(): Promise<ReviewQueueEntry[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Review Queue'!A2:K" })
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Review Queue'!A2:P" })
   );
 
   const rows = res.data.values || [];
@@ -566,6 +580,11 @@ export async function getReviewQueue(): Promise<ReviewQueueEntry[]> {
     generatedDate: row[8] || '',
     approvedDate: row[9] || '',
     campaignId: row[10] || '',
+    daveNotes: row[11] || '',
+    manualReviewRequired: row[12]?.toUpperCase() === 'TRUE',
+    qcAutoStatus: ((row[13] || 'ok').trim().toLowerCase() as ReviewQueueEntry['qcAutoStatus']),
+    nextAction: row[14] || '',
+    regenMode: ((row[15] || '').trim().toLowerCase() as ReviewQueueEntry['regenMode']),
     _rowIndex: i + 2,
   }));
 }
@@ -576,13 +595,17 @@ export async function appendReviewQueueBatch(entries: Omit<ReviewQueueEntry, '_r
   const values = entries.map((e) => [
     e.contactEmail, e.companyName, e.stepNumber, e.emailPurpose,
     e.subject, e.body, e.status, e.reviewerNotes,
-    e.generatedDate, e.approvedDate, e.campaignId,
+    e.generatedDate, e.approvedDate, e.campaignId, e.daveNotes ?? '',
+    e.manualReviewRequired ? 'TRUE' : 'FALSE',
+    e.qcAutoStatus ?? 'ok',
+    e.nextAction ?? '',
+    e.regenMode ?? '',
   ]);
 
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Review Queue'!A:K",
+      range: "'Review Queue'!A:P",
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values },
@@ -601,9 +624,10 @@ export async function updateReviewQueueEntry(
   const data: sheets_v4.Schema$ValueRange[] = [];
 
   for (const [field, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
     const col = REVIEW_FIELD_TO_COLUMN[field as keyof ReviewQueueUpdate];
     if (!col) continue;
-    data.push({ range: `'Review Queue'!${col}${rowIndex}`, values: [[value]] });
+    data.push({ range: `'Review Queue'!${col}${rowIndex}`, values: [[reviewQueueCellValue(value)]] });
   }
 
   if (data.length === 0) return;
@@ -614,6 +638,86 @@ export async function updateReviewQueueEntry(
       requestBody: { valueInputOption: 'RAW', data },
     })
   );
+}
+
+/** Appends one row to the QC Regen Audit tab (append-only). */
+export async function appendQcRegenAudit(entry: QcRegenAuditEntry): Promise<void> {
+  const sheets = await getClient();
+  await withRetry(() =>
+    sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'QC Regen Audit'!A:M",
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[
+          entry.timestamp,
+          entry.contactEmail,
+          entry.stepNumber,
+          entry.attemptNumber,
+          entry.regenMode,
+          entry.inputSourcesUsed,
+          entry.triggerReason,
+          entry.qcIssuesJson,
+          entry.suggestionUsed,
+          entry.subjectBefore,
+          entry.bodyBefore,
+          entry.subjectAfter,
+          entry.bodyAfter,
+        ]],
+      },
+    })
+  );
+}
+
+// Cached numeric sheet id for the "Review Queue" tab (used by row delete).
+let reviewQueueSheetIdCache: number | null = null;
+
+async function resolveReviewQueueSheetId(): Promise<number> {
+  if (reviewQueueSheetIdCache != null) return reviewQueueSheetIdCache;
+  const sheets = await getClient();
+  const meta = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }));
+  const found = meta.data.sheets?.find((s) => s.properties?.title === 'Review Queue');
+  const id = found?.properties?.sheetId;
+  if (id === undefined || id === null) {
+    throw new Error('Spreadsheet has no "Review Queue" tab');
+  }
+  reviewQueueSheetIdCache = id;
+  return id;
+}
+
+/**
+ * Deletes a single row from the Review Queue tab.
+ *
+ * @param rowIndex Same 1-based row number as `_rowIndex` on `ReviewQueueEntry` (header is row 1).
+ */
+export async function deleteReviewQueueRow(rowIndex: number): Promise<void> {
+  if (!Number.isInteger(rowIndex) || rowIndex < 2) {
+    throw new Error('rowIndex must be an integer sheet row >= 2');
+  }
+  const sheets = await getClient();
+  const sheetId = await resolveReviewQueueSheetId();
+  const start0 = rowIndex - 1;
+  await withRetry(() =>
+    sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex: start0,
+                endIndex: rowIndex,
+              },
+            },
+          },
+        ],
+      },
+    })
+  );
+  logger.info({ module: 'sheets', rowIndex }, 'Review queue row deleted');
 }
 
 // ─── Startup verification ────────────────────────────────────────────────────

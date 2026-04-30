@@ -113,6 +113,9 @@ export function buildRawConfig() {
       model: env.LLM_MODEL,
       baseUrl: env.LLM_BASE_URL,
     },
+    dashboard: {
+      secret: env.DASHBOARD_SECRET,
+    },
   };
 }
 
@@ -211,6 +214,9 @@ export function getRedactedConfig(): Record<string, unknown> {
       apiKey: config.llm.apiKey ? '***REDACTED***' : '(not set)',
       model: config.llm.model,
       baseUrl: config.llm.baseUrl,
+    },
+    dashboard: {
+      secret: config.dashboard.secret ? '***REDACTED***' : '(not set)',
     },
   };
 }

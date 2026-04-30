@@ -129,6 +129,17 @@ const adminSchema = z.object({
   apiKey: z.string().optional().default(''),
   /** Serve built SPA from dist/admin at /admin. Default true when apiKey is set. */
   uiEnabled: envBoolean.default(true),
+}).default({
+  apiKey: '',
+  uiEnabled: true,
+});
+
+// --- Operator dashboard (mutations + list APIs that expose contact data) ---
+const dashboardSchema = z.object({
+  /** Required for protected routes — send the same value in the `X-Dashboard-Token` header. */
+  secret: z.string().optional().default(''),
+}).default({
+  secret: '',
 });
 
 const configSchemaBase = z.object({
@@ -143,6 +154,7 @@ const configSchemaBase = z.object({
   pipeline: pipelineSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,
+  dashboard: dashboardSchema,
 });
 
 function deriveEmailMode(
