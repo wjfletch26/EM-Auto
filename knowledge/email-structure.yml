@@ -16,7 +16,8 @@ global_rules:
   - Never repeat the same proof point in consecutive emails.
   - Subject lines must be under 60 characters and avoid spam trigger words.
   - Each email should stand alone — assume the recipient has not read prior emails.
-  - Always include the physical address and unsubscribe link (handled by send engine).
+  - Physical address and unsubscribe link are appended by the send engine — do not add them in the body.
+  - Do not add an email sign-off block (Best, Sincerely, your name, or a standalone Deaton Engineering line); the send engine appends the formal signature.
   - Never make claims that are not supported by the company profile, signals, or case studies.
 
 steps:
