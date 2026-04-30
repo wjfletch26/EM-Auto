@@ -1,5 +1,17 @@
 # Task Breakdown — Deaton Outreach Automation
 
+> **Note (2026-04-29):** This file was the original phased build checklist from early development. Several module paths and task descriptions no longer match the current codebase (e.g. it references `src/services/imap.ts`, `src/classifiers/reply-rules.ts`, and `src/engine/reply-processor.ts` which do not exist in the current tree). Do **not** use this file as a guide for new work.
+>
+> For current status and outstanding tasks, see:
+> - `cursor/IMPLEMENTATION_GUIDE.md` — authoritative implementation progress
+> - `cursor/PHASE0_RESULTS.md` — Phase 0 credential validation outcomes
+> - `project/CHANGELOG.md` — what has been built per release
+> - `docs/ARCHITECTURE.md` — current module structure
+>
+> This file is kept for historical reference only.
+
+---
+
 Each task is sized for one focused implementation session. Tasks within a phase should be completed in order. Cross-phase dependencies are noted.
 
 ---
