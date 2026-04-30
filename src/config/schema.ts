@@ -100,6 +100,14 @@ const appSchema = z.object({
   physicalAddress: z.string().min(1, 'PHYSICAL_ADDRESS is required for CAN-SPAM compliance'),
 });
 
+// --- Admin API + static UI (optional; routes return 503 when key unset) ---
+const adminSchema = z.object({
+  /** Bearer / X-Admin-Key token. Empty = admin API and UI disabled. */
+  apiKey: z.string().optional().default(''),
+  /** Serve built SPA from dist/admin at /admin. Default true when apiKey is set. */
+  uiEnabled: envBoolean.default(true),
+});
+
 /**
  * Top-level config schema. Each section maps to a group of env vars.
  * The config loader (src/config/index.ts) maps raw env vars into this shape.
@@ -112,6 +120,7 @@ export const configSchema = z.object({
   schedule: scheduleSchema,
   logging: loggingSchema,
   app: appSchema,
+  admin: adminSchema,
   pipeline: pipelineSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,

@@ -42,12 +42,14 @@ This is the main operational tab. Each row is one contact.
 | T | `custom_1` | string | Optional custom field for templates. | `(any value)` |
 | U | `custom_2` | string | Optional custom field for templates. | `(any value)` |
 | V | `notes` | string | Operator notes. Not used by the system. | `Met at trade show` |
+| W | `company_url` | string | Company website URL (intelligence pipeline). | `https://acme.com` |
+| X | `pipeline_status` | string | Pipeline state for AI-generated sequences (e.g. `new`, `alignment_complete`). | `new` |
 
 **Key rules:**
-- `email` is the primary key. Must be unique across all rows.
-- The system reads columns A–V. Additional columns to the right are ignored.
+- `email` is the primary key. Must be unique across all rows. The admin UI does not support changing email in place (append a new row instead).
+- The system reads columns A–X (`company_url`, `pipeline_status`). Additional columns to the right are ignored.
 - Row 1 is the header row. Data starts at row 2.
-- The system NEVER deletes rows. It only updates existing cells.
+- The send engine does not delete contact rows; it only updates cells. The **admin UI** can **archive** a contact (soft delete): sets `status` to `do_not_contact` and appends an `[archived YYYY-MM-DD]` line to `notes`, so the row remains for audit.
 - Blank `status` is treated as `new`.
 
 ---

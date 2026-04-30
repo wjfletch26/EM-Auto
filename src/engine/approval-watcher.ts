@@ -29,6 +29,8 @@ export async function runApprovalWatcherCycle(): Promise<void> {
     const byEmail = new Map<string, ReviewQueueEntry[]>();
     for (const entry of reviewQueue) {
       if (!entry.contactEmail) continue;
+      // Superseded drafts (e.g. after admin "regenerate sequence") must not count toward approval.
+      if (entry.status === 'superseded') continue;
       const list = byEmail.get(entry.contactEmail) || [];
       list.push(entry);
       byEmail.set(entry.contactEmail, list);
