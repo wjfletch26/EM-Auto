@@ -1,24 +1,51 @@
 /**
- * Config loader — reads .env, validates with Zod, exports a typed singleton.
+ * Config loader — reads .env files, validates with Zod, exports a typed singleton.
+ *
+ * Load order (predictable, two-step):
+ *   1) Project root `.env`
+ *   2) `.env.${APP_ENV}` if present (override), e.g. `.env.local`, `.env.production`
+ *
+ * APP_ENV is read after step 1 (default `local` for choosing step 2 filename).
  *
  * Usage:
  *   import { config } from './config/index.js';
- *   console.log(config.smtp.host);
  *
  * If any required env var is missing or invalid, the process exits with a clear error message.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { configSchema, type AppConfig } from './schema.js';
 
-// Load .env from project root into process.env
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Project root: works from src/config and dist/config. */
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * Partially redacts a Google Spreadsheet ID for logs (first 4 + last 4 chars).
+ */
+export function redactSpreadsheetId(spreadsheetId: string): string {
+  const s = spreadsheetId.trim();
+  if (s.length <= 8) return '****';
+  return `${s.slice(0, 4)}…${s.slice(-4)}`;
+}
+
+// Load base `.env`, then choose APP_ENV and merge `.env.${APP_ENV}` if it exists.
+dotenv.config({ path: path.join(PROJECT_ROOT, '.env') });
+
+const bootstrapAppEnv = process.env.APP_ENV ?? 'local';
+const envSpecificPath = path.join(PROJECT_ROOT, `.env.${bootstrapAppEnv}`);
+if (fs.existsSync(envSpecificPath)) {
+  dotenv.config({ path: envSpecificPath, override: true });
+}
 
 /**
  * Maps flat process.env vars into the nested shape the Zod schema expects.
  * This keeps the schema clean and lets us rename env vars without touching business logic.
  */
-function buildRawConfig() {
+export function buildRawConfig() {
   const env = process.env;
 
   return {
@@ -41,6 +68,7 @@ function buildRawConfig() {
     google: {
       serviceAccountPath: env.GOOGLE_SERVICE_ACCOUNT_PATH,
       spreadsheetId: env.GOOGLE_SPREADSHEET_ID,
+      productionSpreadsheetId: env.PRODUCTION_GOOGLE_SPREADSHEET_ID,
     },
     unsub: {
       secret: env.UNSUB_SECRET,
@@ -60,8 +88,16 @@ function buildRawConfig() {
       retentionDays: env.LOG_RETENTION_DAYS,
     },
     app: {
+      appEnv: env.APP_ENV,
       nodeEnv: env.NODE_ENV,
       physicalAddress: env.PHYSICAL_ADDRESS,
+      dryRun: env.DRY_RUN,
+      testRecipient: env.TEST_RECIPIENT,
+      schedulerEnabled: env.SCHEDULER_ENABLED,
+    },
+    admin: {
+      apiKey: env.ADMIN_API_KEY,
+      uiEnabled: env.ADMIN_UI_ENABLED,
     },
     pipeline: {
       enabled: env.PIPELINE_ENABLED,
@@ -94,7 +130,7 @@ function loadConfig(): AppConfig {
   if (!result.success) {
     // Format Zod errors into readable lines for the operator
     const errors = result.error.issues.map(
-      (issue) => `  - ${issue.path.join('.')}: ${issue.message}`
+      (issue) => `  - ${issue.path.join('.')}: ${issue.message}`,
     );
 
     // eslint-disable-next-line no-console
@@ -107,6 +143,18 @@ function loadConfig(): AppConfig {
 
 /** Singleton config — validated at import time. */
 export const config: AppConfig = loadConfig();
+
+/**
+ * Structured fields for the startup log line (safe values only).
+ */
+export function getStartupEnvironmentSummary(): Record<string, unknown> {
+  return {
+    appEnv: config.app.appEnv,
+    emailMode: config.app.emailMode,
+    schedulerEnabled: config.app.schedulerEnabled,
+    activeSpreadsheetIdRedacted: redactSpreadsheetId(config.google.spreadsheetId),
+  };
+}
 
 /**
  * Returns a copy of config with sensitive fields redacted.
@@ -130,7 +178,10 @@ export function getRedactedConfig(): Record<string, unknown> {
     },
     google: {
       serviceAccountPath: config.google.serviceAccountPath,
-      spreadsheetId: config.google.spreadsheetId,
+      spreadsheetId: redactSpreadsheetId(config.google.spreadsheetId),
+      productionSpreadsheetId: redactSpreadsheetId(
+        config.google.productionSpreadsheetId,
+      ),
     },
     unsub: {
       secret: '***REDACTED***',
@@ -140,7 +191,19 @@ export function getRedactedConfig(): Record<string, unknown> {
     },
     schedule: config.schedule,
     logging: config.logging,
-    app: config.app,
+    app: {
+      appEnv: config.app.appEnv,
+      nodeEnv: config.app.nodeEnv,
+      emailMode: config.app.emailMode,
+      dryRun: config.app.dryRun,
+      testRecipient: config.app.testRecipient ? '***REDACTED***' : '(not set)',
+      schedulerEnabled: config.app.schedulerEnabled,
+      physicalAddress: config.app.physicalAddress,
+    },
+    admin: {
+      apiKey: config.admin.apiKey ? '***REDACTED***' : '(not set)',
+      uiEnabled: config.admin.uiEnabled,
+    },
     pipeline: config.pipeline,
     perplexity: {
       apiKey: config.perplexity.apiKey ? '***REDACTED***' : '(not set)',

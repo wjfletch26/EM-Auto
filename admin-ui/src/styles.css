@@ -1,0 +1,280 @@
+:root {
+  font-family: system-ui, Segoe UI, Roboto, sans-serif;
+  line-height: 1.45;
+  color: #e8eaed;
+  background: #13151a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: #8ab4f8;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 3rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #1e222a;
+  border-radius: 8px;
+  border: 1px solid #2d3340;
+}
+
+.toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: #9aa0a6;
+}
+
+.toolbar input[type='password'],
+.toolbar input[type='text'] {
+  min-width: 220px;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid #3c4043;
+  background: #13151a;
+  color: #e8eaed;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.tabs button {
+  padding: 0.5rem 0.85rem;
+  border: 1px solid #3c4043;
+  background: #1e222a;
+  color: #e8eaed;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tabs button.active {
+  background: #394457;
+  border-color: #8ab4f8;
+}
+
+.panel {
+  background: #1e222a;
+  border: 1px solid #2d3340;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.msg {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.msg.err {
+  background: #3c1f1f;
+  border: 1px solid #8b4444;
+  color: #f5c6cb;
+}
+
+.msg.ok {
+  background: #1f3c2a;
+  border: 1px solid #448b5e;
+  color: #c6f5d6;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+th,
+td {
+  border: 1px solid #2d3340;
+  padding: 0.35rem 0.45rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #252a33;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tr.selected td {
+  background: #2a3242;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: #9aa0a6;
+}
+
+.form-grid input,
+.form-grid textarea {
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #3c4043;
+  background: #13151a;
+  color: #e8eaed;
+}
+
+.form-grid textarea {
+  min-height: 72px;
+  grid-column: 1 / -1;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+button.primary {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #8ab4f8;
+  background: #394457;
+  color: #e8eaed;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+button.secondary {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #3c4043;
+  background: #252a33;
+  color: #e8eaed;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+button.danger {
+  border-color: #8b4444;
+  background: #3c1f1f;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Review queue — full email preview */
+.review-email-panel {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid #394457;
+  background: #161a22;
+}
+
+.review-email-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.review-email-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.review-meta {
+  font-size: 0.85rem;
+  color: #9aa0a6;
+  margin: 0 0 1rem;
+}
+
+.review-field {
+  margin-bottom: 1rem;
+}
+
+.review-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9aa0a6;
+  margin-bottom: 0.35rem;
+}
+
+.review-value {
+  font-size: 0.9rem;
+  color: #e8eaed;
+}
+
+.review-subject {
+  font-weight: 600;
+}
+
+.review-body {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: min(55vh, 520px);
+  overflow: auto;
+  padding: 0.75rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #2d3340;
+  background: #0d0f14;
+  color: #e8eaed;
+}
+
+.review-qc {
+  color: #f5c6cb;
+  white-space: pre-wrap;
+}
