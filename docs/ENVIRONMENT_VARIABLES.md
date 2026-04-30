@@ -54,7 +54,7 @@ The spreadsheet ID is the long string in: `https://docs.google.com/spreadsheets/
 **Non-production (`local` / `staging`)** must use one of:
 
 1. **Simulated send** — `DRY_RUN=true`  
-   - No SMTP. The app logs what would be sent. The **send engine still updates the active (test) Google Sheet as if the message was sent**, so you can test dashboard → Sheets → state end-to-end.  
+   - No SMTP. The app logs what would be sent. The **send engine still updates the active (test) Google Sheet as if the message was sent**, so you can test admin UI / API → Sheets → state end-to-end.  
    - **No email is delivered.** Do not treat Sheet “sent” state as proof of delivery in this mode. The production sheet is blocked by the rules above.
 2. **Test recipient** — `DRY_RUN=false` and a valid `TEST_RECIPIENT`  
    - Real SMTP, but only to the test mailbox.
@@ -71,7 +71,7 @@ At startup, the app logs an **email mode** string: `simulated_send`, `test_recip
 | --------------------- | ------- | -------- | ----------- |
 | `SCHEDULER_ENABLED`   | boolean | No       | **Default:** `true` when `APP_ENV=production`, **`false` when `APP_ENV` is `local` or `staging`.** Set to `true` explicitly to run background crons on a dev machine. |
 
-When the scheduler is off, the process still runs the web server and you can use the **admin API / dashboard** to run send cycle, pipeline, and approval watcher manually.
+When the scheduler is off, the process still runs the web server and you can use the **admin API or `/admin` UI** to run send cycle, pipeline, and approval watcher manually.
 
 ---
 
@@ -165,7 +165,7 @@ When the scheduler is off, the process still runs the web server and you can use
 - `GOOGLE_SPREADSHEET_ID=<your test copy sheet ID>`
 - `PRODUCTION_GOOGLE_SPREADSHEET_ID=<exact production sheet ID from ops>` (must differ from `GOOGLE_SPREADSHEET_ID`)
 - `DRY_RUN=true` for Simulated send, **or** `DRY_RUN=false` and `TEST_RECIPIENT=you@example.com`
-- Leave `SCHEDULER_ENABLED` unset (defaults **false** so only dashboard/manual actions run)
+- Leave `SCHEDULER_ENABLED` unset (defaults **false** so only manual actions—admin UI/API or scripts—run jobs)
 
 Optionally add **`.env.local`** for overrides (same as env-specific file when `APP_ENV=local`).
 
