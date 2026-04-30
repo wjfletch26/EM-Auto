@@ -7,7 +7,7 @@ import {
 import type { ReviewQueueEntry } from '../services/sheets-types.js';
 
 function makeApprovedEntry(stepNumber: number, overrides: Partial<ReviewQueueEntry> = {}): ReviewQueueEntry {
-  return {
+  const merged = {
     contactEmail: 'test@example.com',
     companyName: 'Acme',
     stepNumber,
@@ -19,8 +19,22 @@ function makeApprovedEntry(stepNumber: number, overrides: Partial<ReviewQueueEnt
     generatedDate: '2026-01-01T00:00:00.000Z',
     approvedDate: '2026-01-01T00:00:00.000Z',
     campaignId: '',
+    daveNotes: '',
+    manualReviewRequired: false,
+    qcAutoStatus: 'ok',
+    nextAction: '',
+    regenMode: '',
     _rowIndex: stepNumber + 1,
     ...overrides,
+  };
+
+  return {
+    ...merged,
+    daveNotes: merged.daveNotes ?? '',
+    manualReviewRequired: merged.manualReviewRequired ?? false,
+    qcAutoStatus: (merged.qcAutoStatus ?? 'ok') as ReviewQueueEntry['qcAutoStatus'],
+    nextAction: merged.nextAction ?? '',
+    regenMode: (merged.regenMode ?? '') as ReviewQueueEntry['regenMode'],
   };
 }
 
