@@ -33,7 +33,7 @@ export function startWebServer(port = config.unsub.port): Server {
 
   const publicRoot = path.join(process.cwd(), 'public');
 
-  app.get('/', rootHandler);
+  // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());

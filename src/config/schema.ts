@@ -131,6 +131,11 @@ const adminSchema = z.object({
   uiEnabled: envBoolean.default(true),
 });
 
+// --- Operator dashboard (DASHBOARD_SECRET; empty = protected APIs return 403) ---
+const dashboardSchema = z.object({
+  secret: z.string().optional().default(''),
+});
+
 const configSchemaBase = z.object({
   smtp: smtpSchema,
   imap: imapSchema,
