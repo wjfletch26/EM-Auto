@@ -129,14 +129,17 @@ steps:
   - step: 9
     purpose: Geography logic
     description: >
-      Emphasize Deaton's Georgetown location and regional advantages. On-site
-      capability, logistics access, central US timezone. Relevant when
-      proximity matters.
+      Practical tie between Deaton (Georgetown / Central Texas) and **how they work**:
+      timezone, collaboration cadence, program execution, logistics. If their HQ is in or
+      near the Texas Triangle, an easy on-site or "swing by" angle may fit. If they are
+      farther away or location is unknown, do **not** suggest you will visit **their**
+      site; lean on remote partnership, reliability, and Central US / Texas strength instead.
     tone: practical, relatable
     content_focus: >
-      Georgetown location. On-site capability. Travel/logistics advantages.
-      Why working with a Texas-based firm is an advantage for them.
-    cta: Soft — "If local matters, we're right here."
+      Central Texas base. When prospect is Texas Triangle–proximal: light on-site or
+      travel ease is OK. Otherwise: remote teamwork, scheduling, shipping access, and
+      why a Texas-based engineering partner still helps—without in-person visit offers.
+    cta: Soft — framed to match proximity (either low-friction local touchpoint or remote/partnership).
     length_guidance: 80-120 words
 
   - step: 10

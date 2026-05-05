@@ -71,6 +71,39 @@ test('runHardEmailQC requires David notes anchor when notes are long enough', ()
   assert.equal(rOk.pass, true);
 });
 
+test('runHardEmailQC flags on-site engineer promises when HQ outside Texas Triangle', () => {
+  const r = runHardEmailQC({
+    emails: [
+      {
+        step: 9,
+        subject: 'Geo',
+        body: 'Central Texas logistics lets us support you whether sending engineers for on-site commissioning or shipments.',
+      },
+    ],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+    headquarters: 'San Francisco, CA',
+  });
+  assert.equal(r.pass, false);
+  assert.ok((r.issuesByStep.get(9) ?? []).some((m) => m.includes('Texas Triangle')));
+});
+
+test('runHardEmailQC allows same copy when HQ is Texas Triangle–proximal', () => {
+  const r = runHardEmailQC({
+    emails: [
+      {
+        step: 9,
+        subject: 'Geo',
+        body: 'We can send engineers for on-site commissioning when helpful.',
+      },
+    ],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+    headquarters: 'Austin, TX',
+  });
+  assert.equal(r.pass, true);
+});
+
 test('mergeHardQCIntoReview merges step issues and flags', () => {
   const qc: QualityReview = {
     overall_pass: true,

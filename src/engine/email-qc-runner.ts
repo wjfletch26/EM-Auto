@@ -8,6 +8,7 @@
 import { loadEmailStructure, loadPersona } from '../skills/knowledge-loader.js';
 import { reviewEmailQuality, type QualityReview } from '../skills/quality-reviewer.js';
 import { mergeHardQCIntoReview, runHardEmailQC } from './email-hard-qc.js';
+import { visitLanguageGuidanceForPrompt } from '../content/texas-triangle-visit-policy.js';
 import type { CompanyProfile } from '../skills/company-research.js';
 import type { EmailSequence } from '../skills/email-generator.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
@@ -35,6 +36,7 @@ export async function runFullMergedQC(input: FullQcInput): Promise<QualityReview
     })),
     allowlistedCaseStudyIds: input.allowlistedCaseStudyIds,
     davidProjectNotes: input.davidProjectNotes,
+    headquarters: input.companyProfile.headquarters,
   });
 
   const persona = loadPersona(input.contactTitle);
@@ -47,6 +49,7 @@ export async function runFullMergedQC(input: FullQcInput): Promise<QualityReview
       alignmentJson: JSON.stringify(input.alignment, null, 2),
       davidProjectNotes: input.davidProjectNotes || '(none)',
       emailStructure: loadEmailStructure(),
+      geographyVisitPolicy: visitLanguageGuidanceForPrompt(input.companyProfile.headquarters),
     },
   );
 

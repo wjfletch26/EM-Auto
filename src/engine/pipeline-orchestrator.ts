@@ -32,7 +32,7 @@ import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 
 // ─── Max auto-QC regen ───────────────────────────────────────────────────────
 
-const MAX_AUTO_REGEN_ROUNDS = 2;
+const MAX_AUTO_REGEN_ROUNDS = 3;
 const REQUIRED_SEQUENCE_STEPS = 12;
 
 // ─── Main Pipeline Cycle ─────────────────────────────────────────────────────

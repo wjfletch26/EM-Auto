@@ -17,6 +17,7 @@ import type { CompanyProfile } from './company-research.js';
 import type { AlignmentResult } from './deaton-alignment.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
+import { visitLanguageGuidanceForPrompt } from '../content/texas-triangle-visit-policy.js';
 
 // ─── Output Schema ───────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ export async function generateEmailSequence(
     case_studies: caseStudies,
     persona,
     email_structure: emailStructure,
+    geography_visit_policy: visitLanguageGuidanceForPrompt(companyProfile.headquarters),
     company_profile: JSON.stringify(companyProfile, null, 2),
     company_signals: JSON.stringify(companyProfile.signals, null, 2),
     alignment: JSON.stringify(alignment, null, 2),

@@ -18,6 +18,7 @@ import type { AlignmentResult } from './deaton-alignment.js';
 import type { ContactContext, EmailSequence } from './email-generator.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
+import { visitLanguageGuidanceForPrompt } from '../content/texas-triangle-visit-policy.js';
 
 const SingleEmailSchema = z.object({
   subject: z.string(),
@@ -75,12 +76,13 @@ export function buildQcRemediation(
   issues: string[],
   suggestion?: string | null,
 ): string {
-  const cappedIssues = issues.slice(0, 6).map((i) => i.trim()).filter(Boolean);
+  // Keep enough text for merged LLM + Hard QC issues (geography rules can be long).
+  const cappedIssues = issues.slice(0, 10).map((i) => i.trim()).filter(Boolean);
   const issueText = cappedIssues
     .map((i, idx) => `${idx + 1}. ${i}`)
     .join('\n')
-    .slice(0, 800);
-  const suggestionText = (suggestion ?? '').trim().slice(0, 200);
+    .slice(0, 2200);
+  const suggestionText = (suggestion ?? '').trim().slice(0, 600);
   const parts = [
     issueText ? `Issues:\n${issueText}` : 'Issues: (none provided)',
     suggestionText ? `Suggested direction: ${suggestionText}` : '',
@@ -107,6 +109,7 @@ export async function regenerateSingleReviewEmail(
     case_studies: loadCaseStudies(),
     persona,
     email_structure: loadEmailStructure(),
+    geography_visit_policy: visitLanguageGuidanceForPrompt(params.companyProfile.headquarters),
     company_profile: JSON.stringify(params.companyProfile, null, 2),
     alignment: JSON.stringify(params.alignment, null, 2),
     contact_first_name: params.contact.firstName,
@@ -125,7 +128,7 @@ export async function regenerateSingleReviewEmail(
   const raw = await provider.complete({
     systemPrompt,
     userPrompt,
-    temperature: 0.35,
+    temperature: params.regenMode === 'auto_qc' ? 0.2 : 0.35,
     maxTokens: 2048,
   });
 

@@ -1,11 +1,16 @@
 /**
  * Deterministic email QC — enforces rules that should not depend on an LLM:
- * dash policy, case-study allowlist, David's project notes presence.
+ * dash policy, Texas Triangle visit wording (when HQ not proximal), case-study allowlist,
+ * David's project notes presence.
  * (Email signature is appended at send time, not validated here.)
  */
 
 import type { QualityReview } from '../skills/quality-reviewer.js';
 import { loadCaseStudyMetadataList } from '../skills/case-study-metadata.js';
+import {
+  describeNonTriangleVisitViolationIfAny,
+  mayOfferInPersonTexasVisit,
+} from '../content/texas-triangle-visit-policy.js';
 
 export interface HardQcEmailSlice {
   step: number;
@@ -19,6 +24,11 @@ export interface HardQcInput {
   allowlistedCaseStudyIds: string[];
   /** When non-empty, at least one email must reflect this text (substring check). */
   davidProjectNotes: string;
+  /**
+   * Company research `headquarters` string. When Texas Triangle proximity is false,
+   * Hard QC rejects wording that dispatches engineers to the prospect's site.
+   */
+  headquarters?: string | null;
 }
 
 export interface HardQcResult {
@@ -106,6 +116,23 @@ function checkCaseStudyAllowlist(
   }
 }
 
+function checkNonTriangleVisitLanguage(
+  blob: string,
+  step: number,
+  issuesByStep: Map<number, string[]>,
+  headquarters: string | null | undefined,
+): void {
+  if (mayOfferInPersonTexasVisit(headquarters)) return;
+  const msg = describeNonTriangleVisitViolationIfAny(blob);
+  if (!msg) return;
+  const push = (m: string) => {
+    const list = issuesByStep.get(step) ?? [];
+    list.push(m);
+    issuesByStep.set(step, list);
+  };
+  push(msg);
+}
+
 /**
  * Runs deterministic checks on a generated or regenerated sequence.
  */
@@ -118,6 +145,7 @@ export function runHardEmailQC(input: HardQcInput): HardQcResult {
     const blob = `${e.subject}\n${e.body}`;
     combinedPieces.push(blob);
     checkDashes(blob, e.step, issuesByStep);
+    checkNonTriangleVisitLanguage(blob, e.step, issuesByStep, input.headquarters);
   }
   const combined = combinedPieces.join('\n');
   const combinedLower = combined.toLowerCase();
