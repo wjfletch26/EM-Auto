@@ -16,6 +16,7 @@ import {
 import type { CompanyProfile } from './company-research.js';
 import type { AlignmentResult } from './deaton-alignment.js';
 import type { ContactContext, EmailSequence } from './email-generator.js';
+import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 
 const SingleEmailSchema = z.object({
   subject: z.string(),
@@ -132,7 +133,11 @@ export async function regenerateSingleReviewEmail(
     logger.error({ module: 'regenerate-review-email', errors: parsed.error.issues }, 'Invalid single-email JSON');
     throw new Error('Regeneration returned invalid JSON for subject/body');
   }
-  return parsed.data;
+  // Same typography policy as generateEmailSequence: no long dashes in stored or sent copy.
+  return {
+    subject: replaceEmDashesWithPlainHyphen(parsed.data.subject),
+    body: replaceEmDashesWithPlainHyphen(parsed.data.body),
+  };
 }
 
 /**

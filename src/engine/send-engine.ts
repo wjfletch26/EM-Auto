@@ -325,6 +325,10 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
           }
         }
 
+        // Strip long dashes on every path (AI queue, templates, or pasted sheet edits) before signature/footer.
+        subject = replaceEmDashesWithPlainHyphen(subject);
+        html = replaceEmDashesWithPlainHyphen(html);
+
         // David Knieriem card + tagline on every outbound message (before CAN-SPAM hr block).
         html = embedOutboundSignatureHtml(html);
         text = stripHtml(html);

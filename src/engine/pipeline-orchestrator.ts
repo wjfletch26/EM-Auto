@@ -26,6 +26,7 @@ import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
 import { companyProfileFromStored, alignmentFromStored, storedProfileHasAlignment } from './company-profile-helpers.js';
 import { mergeContactBriefing } from './contact-briefing.js';
 import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job-mutex.js';
+import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 
 
 // ─── Max auto-QC regen ───────────────────────────────────────────────────────
@@ -447,7 +448,9 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
         emailReview && !emailReview.pass
           ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
           : '';
-      const subject = normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company);
+      const subject = replaceEmDashesWithPlainHyphen(
+        normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company),
+      );
 
       return {
         contactEmail: contact.email,
@@ -455,7 +458,7 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
         stepNumber: email.step,
         emailPurpose: email.purpose,
         subject,
-        body: normalizeGreetingBody(email.body, contact.firstName),
+        body: replaceEmDashesWithPlainHyphen(normalizeGreetingBody(email.body, contact.firstName)),
         status: 'pending_review',
         reviewerNotes: notes,
         generatedDate: now,

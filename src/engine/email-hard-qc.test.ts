@@ -22,7 +22,17 @@ test('runHardEmailQC flags em dash', () => {
     davidProjectNotes: '',
   });
   assert.equal(r.pass, false);
-  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('em dash')));
+  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('U+2014')));
+});
+
+test('runHardEmailQC flags horizontal bar (U+2015)', () => {
+  const r = runHardEmailQC({
+    emails: [{ step: 1, subject: 'Hi', body: `We build systems\u2015fast.` }],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+  });
+  assert.equal(r.pass, false);
+  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('U+2015')));
 });
 
 test('runHardEmailQC allows en dash inside numeric range only', () => {

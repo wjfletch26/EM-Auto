@@ -41,8 +41,11 @@ function checkDashes(text: string, step: number, issuesByStep: Map<number, strin
     list.push(msg);
     issuesByStep.set(step, list);
   };
-  if (text.includes('\u2014')) {
-    push('Body or subject contains an em dash (U+2014); use comma, period, or parentheses instead.');
+  // Block common "long dash" code points models emit; normalized by replaceEmDashesWithPlainHyphen before send.
+  if (text.includes('\u2014') || text.includes('\u2015')) {
+    push(
+      'Body or subject contains an em dash (U+2014) or horizontal bar (U+2015); use comma, period, or spaced hyphen instead.',
+    );
   }
   const enProbe = stripNumericEnDashRanges(text);
   if (enProbe.includes('\u2013')) {

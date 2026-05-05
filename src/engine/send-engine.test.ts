@@ -15,6 +15,18 @@ describe('validateAndNormalizeAIDraft', () => {
     assert.equal(result.bodyPlain, 'Line 1\n\nLine 2');
   });
 
+  it('normalizes em dash and horizontal bar in subject and body', () => {
+    const result = validateAndNormalizeAIDraft(
+      `Hello\u2014there`,
+      `Body\u2015text`,
+      'Fallback',
+      'Thomas',
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.subject, 'Hello - there');
+    assert.equal(result.bodyPlain, 'Body - text');
+  });
+
   it('falls back to campaign step subject when queue subject is blank', () => {
     const result = validateAndNormalizeAIDraft(
       '  ',
