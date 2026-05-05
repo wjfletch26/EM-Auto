@@ -129,12 +129,12 @@ steps:
   - step: 9
     purpose: Geography logic
     description: >
-      Emphasize Deaton's Houston location and regional advantages. On-site
+      Emphasize Deaton's Georgetown location and regional advantages. On-site
       capability, logistics access, central US timezone. Relevant when
       proximity matters.
     tone: practical, relatable
     content_focus: >
-      Houston location. On-site capability. Travel/logistics advantages.
+      Georgetown location. On-site capability. Travel/logistics advantages.
       Why working with a Texas-based firm is an advantage for them.
     cta: Soft — "If local matters, we're right here."
     length_guidance: 80-120 words
