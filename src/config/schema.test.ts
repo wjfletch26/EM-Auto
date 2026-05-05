@@ -42,6 +42,8 @@ function baseRaw(overrides: Record<string, unknown> = {}) {
     pipeline: {},
     perplexity: {},
     llm: {},
+    // Matches buildRawConfig shape — dashboard is required on configSchemaBase.
+    dashboard: {},
   };
   return deepMerge(base, overrides) as typeof base;
 }
