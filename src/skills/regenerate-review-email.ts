@@ -17,6 +17,7 @@ import type { CompanyProfile } from './company-research.js';
 import type { AlignmentResult } from './deaton-alignment.js';
 import type { ContactContext, EmailSequence } from './email-generator.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
+import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 
 const SingleEmailSchema = z.object({
   subject: z.string(),
@@ -136,7 +137,7 @@ export async function regenerateSingleReviewEmail(
   // Same typography policy as generateEmailSequence: no long dashes in stored or sent copy.
   return {
     subject: replaceEmDashesWithPlainHyphen(parsed.data.subject),
-    body: replaceEmDashesWithPlainHyphen(parsed.data.body),
+    body: normalizePlainBodyHyphens(replaceEmDashesWithPlainHyphen(parsed.data.body)),
   };
 }
 

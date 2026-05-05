@@ -16,6 +16,7 @@ import {
 import type { CompanyProfile } from './company-research.js';
 import type { AlignmentResult } from './deaton-alignment.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
+import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 
 // ─── Output Schema ───────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ export async function generateEmailSequence(
     emails: result.data.emails.map((e) => ({
       ...e,
       subject: replaceEmDashesWithPlainHyphen(e.subject),
-      body: replaceEmDashesWithPlainHyphen(e.body),
+      body: normalizePlainBodyHyphens(replaceEmDashesWithPlainHyphen(e.body)),
     })),
   };
 }

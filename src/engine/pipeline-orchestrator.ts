@@ -27,6 +27,7 @@ import { companyProfileFromStored, alignmentFromStored, storedProfileHasAlignmen
 import { mergeContactBriefing } from './contact-briefing.js';
 import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job-mutex.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
+import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 
 
 // ─── Max auto-QC regen ───────────────────────────────────────────────────────
@@ -458,7 +459,9 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
         stepNumber: email.step,
         emailPurpose: email.purpose,
         subject,
-        body: replaceEmDashesWithPlainHyphen(normalizeGreetingBody(email.body, contact.firstName)),
+        body: normalizePlainBodyHyphens(
+          replaceEmDashesWithPlainHyphen(normalizeGreetingBody(email.body, contact.firstName)),
+        ),
         status: 'pending_review',
         reviewerNotes: notes,
         generatedDate: now,
