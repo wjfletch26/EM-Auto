@@ -22,6 +22,12 @@ export type IntelErrorPreview = {
   preview: string;
 };
 
+/** Company Profiles tab: `error_log` preview keyed by canonical URL (column A). */
+export type ProfileErrorPreview = {
+  canonicalUrl: string;
+  preview: string;
+};
+
 /** Shape returned by GET /api/dashboard/summary — stable fields for the static dashboard client. */
 export type DashboardSummary = {
   /** ISO timestamp when this snapshot was assembled on the server. */
@@ -42,6 +48,9 @@ export type DashboardSummary = {
   companyProfiles: {
     total: number;
     pipelineStatus: StatusBreakdown;
+    errorCount: number;
+    /** Up to `maxErrors` non-empty profile `error_log` rows. */
+    errors: ProfileErrorPreview[];
   };
   reviewQueue: {
     total: number;
@@ -97,6 +106,13 @@ export function buildDashboardSummary(
     preview: r.errorLog.length > ERROR_PREVIEW_LEN ? `${r.errorLog.slice(0, ERROR_PREVIEW_LEN)}…` : r.errorLog,
   }));
 
+  const profilesWithErrors = profiles.filter((r) => Boolean(r.errorLog?.trim()));
+  const profileErrors: ProfileErrorPreview[] = profilesWithErrors.slice(0, MAX_ERROR_ROWS).map((r) => ({
+    canonicalUrl: r.canonicalCompanyUrl,
+    preview:
+      r.errorLog.length > ERROR_PREVIEW_LEN ? `${r.errorLog.slice(0, ERROR_PREVIEW_LEN)}…` : r.errorLog,
+  }));
+
   const reviewStatus: StatusBreakdown = {};
   for (const entry of queue) {
     bump(reviewStatus, entry.status || '(empty)');
@@ -118,6 +134,8 @@ export function buildDashboardSummary(
     companyProfiles: {
       total: profiles.length,
       pipelineStatus: profilePipeline,
+      errorCount: profilesWithErrors.length,
+      errors: profileErrors,
     },
     reviewQueue: {
       total: queue.length,

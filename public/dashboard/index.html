@@ -11,7 +11,11 @@
       <header>
         <div>
           <h1>Pipeline dashboard</h1>
-          <p class="sub">Overview is public; operator edits require <code>DASHBOARD_SECRET</code> in <code>.env</code> and the token below.</p>
+          <p class="sub">
+            Overview is public; operator edits require <code>DASHBOARD_SECRET</code> in <code>.env</code> and the token below. Shared Perplexity /
+            alignment payloads live on the <strong>Company profiles</strong> tab; briefings plus join keys stay on <strong>Company intelligence</strong>
+            (see <code>docs/DATA_MODEL.md</code>).
+          </p>
         </div>
         <div class="toolbar">
           <span id="generated-at" class="muted"></span>
@@ -37,7 +41,8 @@
         <button type="button" class="tab active" role="tab" data-tab="overview" aria-selected="true">Overview</button>
         <button type="button" class="tab" role="tab" data-tab="queue">Review queue</button>
         <button type="button" class="tab" role="tab" data-tab="contacts">Contacts</button>
-        <button type="button" class="tab" role="tab" data-tab="intel">Intelligence</button>
+        <button type="button" class="tab" role="tab" data-tab="intel">Intel (per contact)</button>
+        <button type="button" class="tab" role="tab" data-tab="profiles">Company profiles</button>
         <button type="button" class="tab" role="tab" data-tab="tools">Pipeline tools</button>
       </nav>
 
@@ -63,6 +68,14 @@
             <span id="metric-intel-errors" class="value">—</span>
           </div>
           <div class="metric">
+            <span class="label">Company profiles</span>
+            <span id="metric-profiles-total" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Profile errors</span>
+            <span id="metric-profiles-errors" class="value">—</span>
+          </div>
+          <div class="metric">
             <span class="label">Review queue</span>
             <span id="metric-queue-total" class="value">—</span>
           </div>
@@ -74,14 +87,18 @@
             <div id="breakdown-contacts"></div>
           </article>
           <article class="card">
-            <h2>Company intelligence — pipeline status</h2>
+            <h2>Company intelligence — per contact</h2>
             <div id="breakdown-intel"></div>
+          </article>
+          <article class="card">
+            <h2>Company profiles — shared (one URL)</h2>
+            <div id="breakdown-profiles"></div>
           </article>
           <article class="card">
             <h2>Review queue — status</h2>
             <div id="breakdown-queue"></div>
           </article>
-          <article class="card full">
+          <article class="card">
             <h2>Intelligence errors (sample)</h2>
             <div class="table-scroll">
               <table>
@@ -92,6 +109,20 @@
                   </tr>
                 </thead>
                 <tbody id="intel-errors-body"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Company profile errors (sample)</h2>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Canonical URL</th>
+                    <th>Error log</th>
+                  </tr>
+                </thead>
+                <tbody id="profile-errors-body"></tbody>
               </table>
             </div>
           </article>
@@ -117,19 +148,32 @@
 
       <section id="panel-intel" class="tab-panel hidden" data-panel="intel">
         <div class="panel-head">
-          <h2>Company intelligence</h2>
+          <h2>Company intelligence (per contact)</h2>
           <button type="button" id="reload-intel" class="ghost">Reload table</button>
         </div>
+        <p class="muted small">Join key <code>canonical_company_url</code> (column B) links rows to Company profiles column A.</p>
         <div id="intel-mount" class="table-scroll"></div>
+      </section>
+
+      <section id="panel-profiles" class="tab-panel hidden" data-panel="profiles">
+        <div class="panel-head">
+          <h2>Company profiles (shared)</h2>
+          <button type="button" id="reload-profiles" class="ghost">Reload table</button>
+        </div>
+        <p class="muted small">
+          One sheet row per canonical company URL. Canonical URL is column A — do not remap from this UI; edit other columns or fix in Sheets.
+          Save writes via <code>PATCH /api/dashboard/company-profiles/:rowIndex</code>.
+        </p>
+        <div id="profiles-mount" class="table-scroll"></div>
       </section>
 
       <section id="panel-tools" class="tab-panel hidden" data-panel="tools">
         <article class="card">
           <h2>Run pipeline for one contact</h2>
           <p class="muted small">
-            Same reset rules as <code>npm run pipeline:run -- email</code>. Use <strong>new</strong> to force research from
-            <code>company_url</code>, or <strong>alignment_complete</strong> to rebuild the review-queue email set from existing
-            intel.
+            Same reset rules as <code>npm run pipeline:run -- email</code>. Phase A resolves or creates shared rows on Company
+            profiles; use <strong>new</strong> to force fresh research from <code>company_url</code>, or
+            <strong>alignment_complete</strong> to rebuild the review-queue email set using existing profiles + intelligence.
           </p>
           <div class="form-row">
             <label>Email <input type="email" id="pl-email" placeholder="person@company.com" /></label>

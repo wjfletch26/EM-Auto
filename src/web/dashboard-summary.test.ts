@@ -114,5 +114,41 @@ describe('buildDashboardSummary', () => {
     );
     assert.equal(summary.companyProfiles.total, 1);
     assert.equal(summary.companyProfiles.pipelineStatus['alignment_complete'], 1);
+    assert.equal(summary.companyProfiles.errorCount, 0);
+    assert.equal(summary.companyProfiles.errors.length, 0);
+  });
+
+  it('collects company profile errors with previews', () => {
+    const summary = buildDashboardSummary(
+      [],
+      [],
+      [],
+      [
+        {
+          canonicalCompanyUrl: 'https://oops.com/',
+          companyUrl: 'https://oops.com',
+          companyName: 'Oops Co',
+          industry: '',
+          productSummary: '',
+          companySize: '',
+          signals: '',
+          signalSummary: '',
+          deatonCapabilitiesMatched: '',
+          caseStudiesSelected: '',
+          alignmentRationale: '',
+          confidenceScore: '',
+          pipelineStatus: 'research_failed',
+          researchedDate: '',
+          lastRefreshedAt: '',
+          profileVersion: '',
+          errorLog: 'Unable to parse range',
+          _rowIndex: 2,
+        },
+      ],
+    );
+    assert.equal(summary.companyProfiles.errorCount, 1);
+    assert.equal(summary.companyProfiles.errors.length, 1);
+    assert.equal(summary.companyProfiles.errors[0].canonicalUrl, 'https://oops.com/');
+    assert.equal(summary.companyProfiles.errors[0].preview, 'Unable to parse range');
   });
 });

@@ -6,7 +6,7 @@
   const API_BASE = '/api/dashboard';
   const TOKEN_KEY = 'deatonDashboardToken';
 
-  /** @type {{ summary: object, contacts: object[], intelligence: object[], reviewQueue: object[] } | null} */
+  /** @type {{ summary: object, contacts: object[], intelligence: object[], companyProfiles: object[], reviewQueue: object[] } | null} */
   let snapshot = null;
 
   function getToken() {
@@ -130,6 +130,23 @@
             .join('');
         }
       }
+      const cp = data.companyProfiles;
+      document.getElementById('metric-profiles-total').textContent = String(cp.total);
+      document.getElementById('metric-profiles-errors').textContent = String(cp.errorCount);
+      document.getElementById('breakdown-profiles').innerHTML = renderBars(cp.pipelineStatus);
+      const perrBody = document.getElementById('profile-errors-body');
+      if (perrBody) {
+        if (!cp.errors || cp.errors.length === 0) {
+          perrBody.innerHTML = '<tr><td colspan="2" class="muted">No profile errors logged.</td></tr>';
+        } else {
+          perrBody.innerHTML = cp.errors
+            .map(
+              (row) =>
+                `<tr><td class="mono">${escapeHtml(row.canonicalUrl)}</td><td class="mono">${escapeHtml(row.preview)}</td></tr>`,
+            )
+            .join('');
+        }
+      }
       const rq = data.reviewQueue;
       document.getElementById('metric-queue-total').textContent = String(rq.total);
       document.getElementById('breakdown-queue').innerHTML = renderBars(rq.status);
@@ -231,6 +248,11 @@
     const mount = document.getElementById('intel-mount');
     if (!mount || !snapshot) return;
     const list = snapshot.intelligence;
+    if (!list || list.length === 0) {
+      mount.innerHTML =
+        '<p class="muted">No Company intelligence rows yet (pipeline creates one per contact when enabled).</p>';
+      return;
+    }
     mount.innerHTML = list
       .map(
         (r) => `
@@ -239,15 +261,64 @@
           <span class="badge">${r._rowIndex}</span>
           <strong>${escapeHtml(r.contactEmail)}</strong>
           · <span class="status-tag">${escapeHtml(r.pipelineStatus || '')}</span>
+          ${r.canonicalCompanyUrl ? `<span class="subj mono" title="Join key">${escapeHtml((r.canonicalCompanyUrl || '').slice(0, 36))}</span>` : ''}
           ${r.errorLog ? `<span class="subj mono">${escapeHtml((r.errorLog || '').slice(0, 64))}</span>` : ''}
         </summary>
         <div class="i-detail">
+          <label>Canonical company URL (→ Company profiles col A) <input class="i-canon" type="text" value="${escapeHtml(r.canonicalCompanyUrl || '')}" /></label>
+          <label>Company URL (Contacts copy) <input class="i-curl" type="text" value="${escapeHtml(r.companyUrl || '')}" /></label>
           <label>Pipeline status <input class="i-pipe" type="text" value="${escapeHtml(r.pipelineStatus || '')}" /></label>
+          <label>Generated date <input class="i-gen" type="text" value="${escapeHtml(r.generatedDate || '')}" /></label>
           <label>David project notes <textarea class="i-david" rows="4">${escapeHtml(r.davidProjectNotes || '')}</textarea></label>
-          <label>Error log <textarea class="i-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
           <label>Executive brief <textarea class="i-brief" rows="4">${escapeHtml(r.executiveBrief || '')}</textarea></label>
+          <label>Error log <textarea class="i-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
           <div class="btn-row">
             <button type="button" data-act="save-i">Save intelligence row</button>
+          </div>
+        </div>
+      </details>`,
+      )
+      .join('');
+  }
+
+  function renderProfiles() {
+    const mount = document.getElementById('profiles-mount');
+    if (!mount || !snapshot) return;
+    const list = snapshot.companyProfiles || [];
+    if (list.length === 0) {
+      mount.innerHTML = '<p class="muted">No company profile rows (add the <strong>Company Profiles</strong> tab to the sheet or run <code>setup-sheets</code>).</p>';
+      return;
+    }
+    mount.innerHTML = list
+      .map(
+        (r) => `
+      <details class="p-row" data-row="${r._rowIndex}">
+        <summary>
+          <span class="badge">${r._rowIndex}</span>
+          <span class="mono" title="${escapeHtml(r.canonicalCompanyUrl)}">${escapeHtml((r.canonicalCompanyUrl || '').slice(0, 52))}</span>
+          · <span class="status-tag">${escapeHtml(r.pipelineStatus || '')}</span>
+          <span class="subj">${escapeHtml((r.companyName || '').slice(0, 48))}</span>
+        </summary>
+        <div class="p-detail">
+          <p class="muted small">Column A (canonical) is read-only here: <code>${escapeHtml(r.canonicalCompanyUrl || '')}</code></p>
+          <label>Display company URL <input class="p-url" type="text" value="${escapeHtml(r.companyUrl || '')}" /></label>
+          <label>Company name <input class="p-name" type="text" value="${escapeHtml(r.companyName || '')}" /></label>
+          <label>Industry <input class="p-ind" type="text" value="${escapeHtml(r.industry || '')}" /></label>
+          <label>Product summary <textarea class="p-prod" rows="3">${escapeHtml(r.productSummary || '')}</textarea></label>
+          <label>Company size <input class="p-size" type="text" value="${escapeHtml(r.companySize || '')}" /></label>
+          <label>Signals <textarea class="p-sig" rows="4">${escapeHtml(r.signals || '')}</textarea></label>
+          <label>Signal summary <textarea class="p-sigs" rows="3">${escapeHtml(r.signalSummary || '')}</textarea></label>
+          <label>Deaton capabilities matched <textarea class="p-cap" rows="3">${escapeHtml(r.deatonCapabilitiesMatched || '')}</textarea></label>
+          <label>Case studies selected <textarea class="p-cases" rows="3">${escapeHtml(r.caseStudiesSelected || '')}</textarea></label>
+          <label>Alignment rationale <textarea class="p-align" rows="3">${escapeHtml(r.alignmentRationale || '')}</textarea></label>
+          <label>Confidence score <input class="p-conf" type="text" value="${escapeHtml(r.confidenceScore || '')}" /></label>
+          <label>Pipeline status <input class="p-pipe" type="text" value="${escapeHtml(r.pipelineStatus || '')}" /></label>
+          <label>Researched date <input class="p-res" type="text" value="${escapeHtml(r.researchedDate || '')}" /></label>
+          <label>Last refreshed at <input class="p-lref" type="text" value="${escapeHtml(r.lastRefreshedAt || '')}" /></label>
+          <label>Profile version <input class="p-ver" type="text" value="${escapeHtml(r.profileVersion || '')}" /></label>
+          <label>Error log <textarea class="p-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
+          <div class="btn-row">
+            <button type="button" data-act="save-p">Save profile row</button>
           </div>
         </div>
       </details>`,
@@ -260,6 +331,7 @@
     renderReviewQueue();
     renderContacts();
     renderIntel();
+    renderProfiles();
   }
 
   document.getElementById('save-token')?.addEventListener('click', () => {
@@ -291,6 +363,9 @@
   document.getElementById('reload-intel')?.addEventListener('click', () => {
     void reloadOperatorTables().catch(() => {});
   });
+  document.getElementById('reload-profiles')?.addEventListener('click', () => {
+    void reloadOperatorTables().catch(() => {});
+  });
 
   /** @param {string} tab */
   function activateTab(tab) {
@@ -311,7 +386,7 @@
       if (!tab) return;
       activateTab(tab);
       if (tab === 'overview') void loadOverview();
-      if (tab === 'queue' || tab === 'contacts' || tab === 'intel') {
+      if (tab === 'queue' || tab === 'contacts' || tab === 'intel' || tab === 'profiles') {
         void reloadOperatorTables().catch((e) => {
           showError(e instanceof Error ? e.message : String(e));
         });
@@ -430,14 +505,60 @@
     setLoading(true);
     try {
       const body = {
+        canonicalCompanyUrl: rowEl.querySelector('.i-canon')?.value ?? '',
+        companyUrl: rowEl.querySelector('.i-curl')?.value ?? '',
         pipelineStatus: rowEl.querySelector('.i-pipe')?.value ?? '',
+        generatedDate: rowEl.querySelector('.i-gen')?.value ?? '',
         davidProjectNotes: rowEl.querySelector('.i-david')?.value ?? '',
-        errorLog: rowEl.querySelector('.i-err')?.value ?? '',
         executiveBrief: rowEl.querySelector('.i-brief')?.value ?? '',
+        errorLog: rowEl.querySelector('.i-err')?.value ?? '',
       };
       await api(`/intelligence/${rowIndex}`, { method: 'PATCH', body: JSON.stringify(body) });
       await reloadOperatorTables();
       activateTab('intel');
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  document.getElementById('profiles-mount')?.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (t.getAttribute('data-act') !== 'save-p') return;
+    const rowEl = t.closest('.p-row');
+    if (!(rowEl instanceof HTMLElement)) return;
+    const rowIndex = parseInt(rowEl.getAttribute('data-row') || '', 10);
+    void handleProfileSave(rowIndex, rowEl);
+  });
+
+  async function handleProfileSave(rowIndex, rowEl) {
+    clearError();
+    setLoading(true);
+    try {
+      const body = {
+        companyUrl: rowEl.querySelector('.p-url')?.value ?? '',
+        companyName: rowEl.querySelector('.p-name')?.value ?? '',
+        industry: rowEl.querySelector('.p-ind')?.value ?? '',
+        productSummary: rowEl.querySelector('.p-prod')?.value ?? '',
+        companySize: rowEl.querySelector('.p-size')?.value ?? '',
+        signals: rowEl.querySelector('.p-sig')?.value ?? '',
+        signalSummary: rowEl.querySelector('.p-sigs')?.value ?? '',
+        deatonCapabilitiesMatched: rowEl.querySelector('.p-cap')?.value ?? '',
+        caseStudiesSelected: rowEl.querySelector('.p-cases')?.value ?? '',
+        alignmentRationale: rowEl.querySelector('.p-align')?.value ?? '',
+        confidenceScore: rowEl.querySelector('.p-conf')?.value ?? '',
+        pipelineStatus: rowEl.querySelector('.p-pipe')?.value ?? '',
+        researchedDate: rowEl.querySelector('.p-res')?.value ?? '',
+        lastRefreshedAt: rowEl.querySelector('.p-lref')?.value ?? '',
+        profileVersion: rowEl.querySelector('.p-ver')?.value ?? '',
+        errorLog: rowEl.querySelector('.p-err')?.value ?? '',
+      };
+      await api(`/company-profiles/${rowIndex}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await reloadOperatorTables();
+      void loadOverview();
+      activateTab('profiles');
     } catch (e) {
       showError(e instanceof Error ? e.message : String(e));
     } finally {
