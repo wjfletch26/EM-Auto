@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminFetch, getStoredApiKey, setStoredApiKey } from './api';
 
-type Tab = 'contacts' | 'intel' | 'review' | 'actions';
+type Tab = 'contacts' | 'intel' | 'profiles' | 'review' | 'actions';
+
+/** Company intelligence row from API (per-contact briefing + linkage). */
+type IntelRow = Record<string, unknown> & {
+  contactEmail: string;
+  canonicalCompanyUrl: string;
+  _rowIndex: number;
+};
+
+/** One shared company profile row — research + alignment. */
+type ProfileRow = Record<string, unknown> & { canonicalCompanyUrl: string; _rowIndex: number };
 
 /** Contact row shape from GET /contacts (mirrors backend). */
 type ContactRow = Record<string, unknown> & { email: string; _rowIndex: number };
-
-/** Company intelligence row from API. */
-type IntelRow = Record<string, unknown> & { contactEmail: string; _rowIndex: number };
 
 /** Review queue row from API (subject/body from generated sequence). */
 type ReviewRow = Record<string, unknown> & {
@@ -32,6 +39,7 @@ export function App(): JSX.Element {
 
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [intelRows, setIntelRows] = useState<IntelRow[]>([]);
+  const [profileRows, setProfileRows] = useState<ProfileRow[]>([]);
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
   const [reviewFilterEmail, setReviewFilterEmail] = useState('');
   /** Row selected to show full email content below the table. */
@@ -42,6 +50,9 @@ export function App(): JSX.Element {
 
   const [selectedIntel, setSelectedIntel] = useState<IntelRow | null>(null);
   const [intelDraft, setIntelDraft] = useState<Record<string, string>>({});
+
+  const [selectedProfile, setSelectedProfile] = useState<ProfileRow | null>(null);
+  const [profileDraft, setProfileDraft] = useState<Record<string, string>>({});
 
   const [newContact, setNewContact] = useState({
     email: '',
@@ -87,6 +98,19 @@ export function App(): JSX.Element {
     }
   }, [showMsg]);
 
+  const refreshProfiles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await adminFetch<{ companyProfiles: ProfileRow[] }>('/company-profiles');
+      setProfileRows(data.companyProfiles);
+      showMsg('ok', `Loaded ${data.companyProfiles.length} company profiles`);
+    } catch (e) {
+      showMsg('err', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [showMsg]);
+
   const refreshReview = useCallback(async () => {
     setLoading(true);
     try {
@@ -112,8 +136,9 @@ export function App(): JSX.Element {
     if (!getStoredApiKey().trim()) return;
     if (tab === 'contacts' || tab === 'actions') void refreshContacts();
     if (tab === 'intel') void refreshIntel();
+    if (tab === 'profiles') void refreshProfiles();
     if (tab === 'review') void refreshReview();
-  }, [tab, refreshContacts, refreshIntel, refreshReview]);
+  }, [tab, refreshContacts, refreshIntel, refreshProfiles, refreshReview]);
 
   const sequenceContactsFiltered = useMemo(() => {
     const q = sequenceFilterEmail.trim().toLowerCase();
@@ -164,6 +189,25 @@ export function App(): JSX.Element {
     const r = selectedIntel;
     const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
     setIntelDraft({
+      canonicalCompanyUrl: str(r.canonicalCompanyUrl),
+      companyUrl: str(r.companyUrl),
+      davidProjectNotes: str(r.davidProjectNotes),
+      executiveBrief: str(r.executiveBrief),
+      pipelineStatus: str(r.pipelineStatus),
+      generatedDate: str(r.generatedDate),
+      errorLog: str(r.errorLog),
+    });
+  }, [selectedIntel]);
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      setProfileDraft({});
+      return;
+    }
+    const r = selectedProfile;
+    const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+    setProfileDraft({
+      companyUrl: str(r.companyUrl),
       companyName: str(r.companyName),
       industry: str(r.industry),
       productSummary: str(r.productSummary),
@@ -174,14 +218,13 @@ export function App(): JSX.Element {
       caseStudiesSelected: str(r.caseStudiesSelected),
       alignmentRationale: str(r.alignmentRationale),
       confidenceScore: str(r.confidenceScore),
-      davidProjectNotes: str(r.davidProjectNotes),
-      executiveBrief: str(r.executiveBrief),
       pipelineStatus: str(r.pipelineStatus),
       researchedDate: str(r.researchedDate),
-      generatedDate: str(r.generatedDate),
+      lastRefreshedAt: str(r.lastRefreshedAt),
+      profileVersion: str(r.profileVersion),
       errorLog: str(r.errorLog),
     });
-  }, [selectedIntel]);
+  }, [selectedProfile]);
 
   const saveApiKey = () => {
     setStoredApiKey(apiKeyInput.trim());
@@ -297,6 +340,23 @@ export function App(): JSX.Element {
     }
   };
 
+  const saveProfilePatch = async () => {
+    if (!selectedProfile) return;
+    setLoading(true);
+    try {
+      await adminFetch(`/company-profiles/${selectedProfile._rowIndex}`, {
+        method: 'PATCH',
+        json: profileDraft,
+      });
+      showMsg('ok', 'Company profile updated');
+      await refreshProfiles();
+    } catch (e) {
+      showMsg('err', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const saveReviewRow = async (row: ReviewRow, patch: Partial<ReviewRow>) => {
     setLoading(true);
     try {
@@ -341,6 +401,7 @@ export function App(): JSX.Element {
         [
           ['contacts', 'Contacts'],
           ['intel', 'Company intelligence'],
+          ['profiles', 'Company profiles'],
           ['review', 'Review queue'],
           ['actions', 'Sequence actions'],
         ] as const
@@ -557,7 +618,11 @@ export function App(): JSX.Element {
       {tab === 'intel' ? (
         <>
           <div className="panel">
-            <h2>Company intelligence</h2>
+            <h2>Company intelligence (per contact)</h2>
+            <p style={{ fontSize: '0.85rem', color: '#9aa0a6', marginTop: 0 }}>
+              Links a contact to a canonical company URL and stores David / project notes. Shared research lives on the{' '}
+              <strong>Company profiles</strong> tab.
+            </p>
             <div className="row-actions">
               <button type="button" className="secondary" disabled={loading} onClick={() => void refreshIntel()}>
                 Refresh
@@ -568,8 +633,7 @@ export function App(): JSX.Element {
                 <thead>
                   <tr>
                     <th>Email</th>
-                    <th>Company</th>
-                    <th>Industry</th>
+                    <th>Canonical URL</th>
                     <th>Pipeline</th>
                   </tr>
                 </thead>
@@ -582,8 +646,7 @@ export function App(): JSX.Element {
                       style={{ cursor: 'pointer' }}
                     >
                       <td>{r.contactEmail}</td>
-                      <td>{String(r.companyName)}</td>
-                      <td>{String(r.industry)}</td>
+                      <td title={String(r.canonicalCompanyUrl)}>{String(r.canonicalCompanyUrl).slice(0, 42)}</td>
                       <td>{String(r.pipelineStatus)}</td>
                     </tr>
                   ))}
@@ -598,26 +661,17 @@ export function App(): JSX.Element {
               <div className="form-grid">
                 {(
                   [
-                    ['companyName', 'Company name'],
-                    ['industry', 'Industry'],
-                    ['productSummary', 'Product summary'],
-                    ['companySize', 'Company size'],
-                    ['signals', 'Signals (JSON)'],
-                    ['signalSummary', 'Signal summary'],
-                    ['deatonCapabilitiesMatched', 'Capabilities matched'],
-                    ['caseStudiesSelected', 'Case studies'],
-                    ['alignmentRationale', 'Alignment rationale'],
-                    ['confidenceScore', 'Confidence'],
+                    ['canonicalCompanyUrl', 'Canonical company URL'],
+                    ['companyUrl', 'Display company URL'],
                     ['davidProjectNotes', 'David / project notes'],
                     ['pipelineStatus', 'Pipeline status'],
-                    ['researchedDate', 'Researched date'],
                     ['generatedDate', 'Generated date'],
                     ['errorLog', 'Error log'],
                   ] as const
                 ).map(([key, label]) => (
                   <label key={key}>
                     {label}
-                    {key === 'signals' || key === 'alignmentRationale' || key === 'errorLog' ? (
+                    {key === 'davidProjectNotes' || key === 'errorLog' ? (
                       <textarea
                         value={intelDraft[key] ?? ''}
                         onChange={(e) => setIntelDraft((d) => ({ ...d, [key]: e.target.value }))}
@@ -641,6 +695,104 @@ export function App(): JSX.Element {
               <div className="row-actions">
                 <button type="button" className="primary" disabled={loading} onClick={() => void saveIntelPatch()}>
                   Save intel
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === 'profiles' ? (
+        <>
+          <div className="panel">
+            <h2>Company profiles (shared intelligence)</h2>
+            <p style={{ fontSize: '0.85rem', color: '#9aa0a6', marginTop: 0 }}>
+              One row per canonical website — researched once, reused by all contacts at that company. Patched by sheet
+              row index.
+            </p>
+            <div className="row-actions">
+              <button type="button" className="secondary" disabled={loading} onClick={() => void refreshProfiles()}>
+                Refresh
+              </button>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Canonical URL</th>
+                    <th>Company</th>
+                    <th>Pipeline</th>
+                    <th>Version</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profileRows.map((r) => (
+                    <tr
+                      key={`${r.canonicalCompanyUrl}-${r._rowIndex}`}
+                      className={selectedProfile?._rowIndex === r._rowIndex ? 'selected' : ''}
+                      onClick={() => setSelectedProfile(r)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>{r._rowIndex}</td>
+                      <td title={String(r.canonicalCompanyUrl)}>{String(r.canonicalCompanyUrl).slice(0, 36)}</td>
+                      <td>{String(r.companyName)}</td>
+                      <td>{String(r.pipelineStatus)}</td>
+                      <td>{String(r.profileVersion)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {selectedProfile ? (
+            <div className="panel">
+              <h2>Edit company profile — row {selectedProfile._rowIndex}</h2>
+              <p style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
+                Canonical URL (column A) is read-only — create a new contact with the right <code>company_url</code> if
+                the key must change.
+              </p>
+              <div className="form-grid">
+                {(
+                  [
+                    ['companyUrl', 'Display URL'],
+                    ['companyName', 'Company name'],
+                    ['industry', 'Industry'],
+                    ['productSummary', 'Product summary'],
+                    ['companySize', 'Company size'],
+                    ['signals', 'Signals (JSON)'],
+                    ['signalSummary', 'Signal summary'],
+                    ['deatonCapabilitiesMatched', 'Capabilities matched'],
+                    ['caseStudiesSelected', 'Case studies'],
+                    ['alignmentRationale', 'Alignment rationale'],
+                    ['confidenceScore', 'Confidence'],
+                    ['pipelineStatus', 'Pipeline status'],
+                    ['researchedDate', 'Researched date'],
+                    ['lastRefreshedAt', 'Last refreshed at'],
+                    ['profileVersion', 'Profile version'],
+                    ['errorLog', 'Error log'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key}>
+                    {label}
+                    {key === 'signals' || key === 'alignmentRationale' || key === 'errorLog' ? (
+                      <textarea
+                        value={profileDraft[key] ?? ''}
+                        onChange={(e) => setProfileDraft((d) => ({ ...d, [key]: e.target.value }))}
+                      />
+                    ) : (
+                      <input
+                        value={profileDraft[key] ?? ''}
+                        onChange={(e) => setProfileDraft((d) => ({ ...d, [key]: e.target.value }))}
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+              <div className="row-actions">
+                <button type="button" className="primary" disabled={loading} onClick={() => void saveProfilePatch()}>
+                  Save profile row
                 </button>
               </div>
             </div>
@@ -826,6 +978,14 @@ export function App(): JSX.Element {
             </button>
             <button type="button" className="secondary" disabled={loading} onClick={() => void postAction('/actions/approval-watcher')}>
               Run approval watcher
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={loading}
+              onClick={() => void postAction('/actions/company-profile-refresh')}
+            >
+              Run company profile refresh
             </button>
           </div>
           <div className="table-wrap">

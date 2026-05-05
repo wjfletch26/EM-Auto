@@ -9,6 +9,7 @@ import type {
   CompanyIntelligence,
   Contact,
   ReviewQueueEntry,
+  StoredCompanyProfile,
 } from '../services/sheets.js';
 
 /** One bucket of string keys → counts (pipeline statuses, review statuses, etc.). */
@@ -37,6 +38,11 @@ export type DashboardSummary = {
     /** Up to `maxErrors` non-empty errorLog rows, newest-first by sheet order is not guaranteed. */
     errors: IntelErrorPreview[];
   };
+  /** One row per canonical company URL — shared intelligence. */
+  companyProfiles: {
+    total: number;
+    pipelineStatus: StatusBreakdown;
+  };
   reviewQueue: {
     total: number;
     status: StatusBreakdown;
@@ -55,16 +61,18 @@ function bump(map: StatusBreakdown, key: string): void {
 }
 
 /**
- * Aggregates contacts, intelligence rows, and review-queue rows into one dashboard payload.
+ * Aggregates contacts, intelligence rows, company profiles, and review-queue rows into one dashboard payload.
  *
  * @param contacts - All rows from the Contacts tab.
- * @param intel - All rows from the Company Intelligence tab.
+ * @param intel - All rows from the Company Intelligence tab (per-contact).
  * @param queue - All rows from the Review Queue tab.
+ * @param profiles - All rows from the Company Profiles tab (shared per company URL).
  */
 export function buildDashboardSummary(
   contacts: Contact[],
   intel: CompanyIntelligence[],
   queue: ReviewQueueEntry[],
+  profiles: StoredCompanyProfile[] = [],
 ): DashboardSummary {
   const contactPipeline: StatusBreakdown = {};
   let withUrl = 0;
@@ -78,12 +86,15 @@ export function buildDashboardSummary(
     bump(intelPipeline, row.pipelineStatus || '(empty)');
   }
 
+  const profilePipeline: StatusBreakdown = {};
+  for (const row of profiles) {
+    bump(profilePipeline, row.pipelineStatus || '(empty)');
+  }
+
   const withErrors = intel.filter((r) => Boolean(r.errorLog?.trim()));
   const errors: IntelErrorPreview[] = withErrors.slice(0, MAX_ERROR_ROWS).map((r) => ({
     contactEmail: r.contactEmail,
-    preview: r.errorLog.length > ERROR_PREVIEW_LEN
-      ? `${r.errorLog.slice(0, ERROR_PREVIEW_LEN)}…`
-      : r.errorLog,
+    preview: r.errorLog.length > ERROR_PREVIEW_LEN ? `${r.errorLog.slice(0, ERROR_PREVIEW_LEN)}…` : r.errorLog,
   }));
 
   const reviewStatus: StatusBreakdown = {};
@@ -103,6 +114,10 @@ export function buildDashboardSummary(
       pipelineStatus: intelPipeline,
       errorCount: withErrors.length,
       errors,
+    },
+    companyProfiles: {
+      total: profiles.length,
+      pipelineStatus: profilePipeline,
     },
     reviewQueue: {
       total: queue.length,

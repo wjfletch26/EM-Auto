@@ -6,8 +6,7 @@
 import { config } from '../config/index.js';
 import { createLLMProvider } from '../services/llm-provider.js';
 import * as sheets from '../services/sheets.js';
-import type { CompanyIntelligence } from '../services/sheets-types.js';
-import type { CompanyProfile } from '../skills/company-research.js';
+import type { CompanyIntelligence, Contact } from '../services/sheets-types.js';
 import type { EmailSequence } from '../skills/email-generator.js';
 import {
   buildQcRemediation,
@@ -15,50 +14,9 @@ import {
   reviewRegeneratedEmailCohesion,
 } from '../skills/regenerate-review-email.js';
 import { runFullMergedQC } from '../engine/email-qc-runner.js';
-
-function safeParseJSON<T>(str: string, fallback: T): T {
-  try {
-    return JSON.parse(str) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function buildProfile(intel: CompanyIntelligence): CompanyProfile {
-  return {
-    company_name: intel.companyName,
-    website: intel.companyUrl,
-    industry: intel.industry,
-    product_summary: intel.productSummary,
-    company_size: intel.companySize,
-    signals: safeParseJSON(intel.signals, []),
-    signal_summary: intel.signalSummary,
-    technologies_mentioned: [],
-    key_challenges_inferred: [],
-  };
-}
-
-function buildAlignment(intel: CompanyIntelligence) {
-  return {
-    relevant_capabilities: intel.deatonCapabilitiesMatched
-      .split(', ')
-      .filter(Boolean)
-      .map((name) => ({
-        capability_key: name.toLowerCase().replace(/ /g, '_'),
-        capability_name: name,
-        relevance_explanation: '',
-      })),
-    selected_case_studies: intel.caseStudiesSelected
-      .split(', ')
-      .filter(Boolean)
-      .map((id) => ({ case_study_id: id, relevance_rationale: '' })),
-    connection_bridge: intel.alignmentRationale,
-    confidence: intel.confidenceScore as 'high' | 'medium' | 'low',
-    confidence_reasoning: '',
-    no_fit_flag: false,
-    no_fit_reason: null,
-  };
-}
+import { companyProfileFromStored, alignmentFromStored } from '../engine/company-profile-helpers.js';
+import { mergeContactBriefing } from '../engine/contact-briefing.js';
+import { normalizeCanonicalCompanyUrl } from '../utils/normalize-company-url.js';
 
 export type RegenerateReviewRowResult = {
   cohesionPass: boolean;
@@ -83,9 +41,25 @@ export function buildUserDirectedInputSources(
   return JSON.stringify([
     ...(userNotes ? ['user_notes'] : []),
     ...(davidNotes ? ['david_project_notes'] : []),
+    'merged_contact_briefing',
     'qc_remediation_history',
     'sequence_context',
   ]);
+}
+
+/**
+ * Mirrors Phase B briefing: Contacts notes/custom + Company Intelligence David notes +
+ * Review Queue per-step Dave instructions.
+ */
+function buildRegenerationBrief(intel: CompanyIntelligence, contact: Contact, stepDaveNotes: string): string {
+  let base = mergeContactBriefing(contact, intel);
+  const step = stepDaveNotes.trim();
+  if (step) {
+    base = base
+      ? `${base}\n\nReview Queue step instructions (Dave):\n${step}`
+      : `Review Queue step instructions (Dave):\n${step}`;
+  }
+  return base;
 }
 
 /**
@@ -125,8 +99,18 @@ export async function regenerateReviewQueueRow(
   const contact = contacts.find((c) => c.email.toLowerCase() === entry.contactEmail);
   if (!contact) throw new Error('Contacts row not found for this email');
 
-  const profile = buildProfile(intel);
-  const alignment = buildAlignment(intel);
+  const canonKey =
+    intel.canonicalCompanyUrl.trim() || normalizeCanonicalCompanyUrl(contact.companyUrl);
+  if (!canonKey) throw new Error('Cannot resolve canonical company URL for regeneration');
+
+  const profiles = await sheets.getCompanyProfiles();
+  const stored = profiles.find((p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonKey.toLowerCase());
+  if (!stored) throw new Error(`Company profile not found for ${canonKey}`);
+
+  const profile = companyProfileFromStored(stored);
+  const alignment = alignmentFromStored(stored);
+
+  const briefing = buildRegenerationBrief(intel, contact, daveNotes);
   const llm = createLLMProvider(config);
 
   const otherEmails = siblings
@@ -151,7 +135,7 @@ export async function regenerateReviewQueueRow(
     stepNumber: entry.stepNumber,
     stepPurpose: entry.emailPurpose,
     originalEmail: { subject: entry.subject, body: entry.body },
-    davidProjectNotes: daveNotes,
+    davidProjectNotes: briefing,
     qcRemediation: buildQcRemediation(failedReview.issues, failedReview.suggestion),
     userNotes,
     otherEmails,
@@ -172,8 +156,8 @@ export async function regenerateReviewQueueRow(
     sequence: emailSequence,
     alignment,
     contactTitle: contact.title,
-    allowlistedCaseStudyIds: intel.caseStudiesSelected.split(',').map((s) => s.trim()).filter(Boolean),
-    davidProjectNotes: daveNotes,
+    allowlistedCaseStudyIds: stored.caseStudiesSelected.split(',').map((s) => s.trim()).filter(Boolean),
+    davidProjectNotes: briefing,
   });
   const stepReview = qcMerged.email_reviews.find((r) => r.step === entry.stepNumber);
   const hardPass = Boolean(stepReview?.pass);

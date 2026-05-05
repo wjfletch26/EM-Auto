@@ -84,6 +84,11 @@ const loggingSchema = z.object({
 const pipelineSchema = z.object({
   enabled: envBoolean.default(false),
   cron: z.string().default('*/5 * * * *'),
+  /** Separate cron for re-researching existing Company Profiles (default: monthly, 03:00 on day 1). */
+  companyRefreshCron: z.string().default('0 3 1 * *'),
+  companyRefreshEnabled: envBoolean.default(true),
+  /** Minimum age (`last_refreshed_at`) before a profile is eligible for refresh. */
+  companyStaleAfterDays: z.coerce.number().int().positive().default(28),
 });
 
 const perplexitySchema = z.object({

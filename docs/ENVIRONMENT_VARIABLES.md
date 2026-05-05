@@ -200,6 +200,20 @@ On boot, the app logs **runtime environment** (structured): `appEnv`, `emailMode
 
 ---
 
+## Intelligence pipeline (optional LLM enrichment)
+
+Aligned with [`src/config/schema.ts`](../src/config/schema.ts) `pipeline` object.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PIPELINE_ENABLED` | `false` | Master switch — when `false`, `runPipelineCycle` and scheduled profile refresh exit immediately. |
+| `PIPELINE_CRON` | `*/5 * * * *` | Cadence for `runPipelineCycle` + approval watcher (when pipeline enabled). |
+| `PIPELINE_COMPANY_REFRESH_CRON` | `0 3 1 * *` | Cadence for `runCompanyProfileRefreshCycle`. |
+| `PIPELINE_COMPANY_REFRESH_ENABLED` | `true` | When `false`, company profile refresh is never scheduled. |
+| `PIPELINE_COMPANY_STALE_AFTER_DAYS` | `28` | Profiles older than this (from `last_refreshed_at` / fallback `researched_date`) are refreshed. |
+
+---
+
 ## Zod schema
 
 The source of truth is [`src/config/schema.ts`](../src/config/schema.ts). The markdown “reference schema” is intentionally omitted here to avoid drift.

@@ -2,32 +2,34 @@
  * Pipeline Orchestrator — runs contacts through the intelligence pipeline.
  *
  * The cron scheduler calls runPipelineCycle() which:
- * 1. Finds contacts with pipeline_status = 'new' → runs research + alignment
- * 2. Finds contacts with pipeline_status = 'ready_for_generation' → runs email gen + QC
+ * 1. Finds contacts with pipeline_status = 'new' → company-scoped research + alignment (once per canonical URL),
+ *    then per-contact Intel rows linked to Company Profiles.
+ * 2. Finds contacts with pipeline_status = 'alignment_complete' / 'ready_for_generation' → email gen + QC
  *
- * Each contact moves through the state machine defined in the build plan.
- * Errors at any stage are caught, logged, and written to the Company Intel tab.
+ * Company intelligence is shared via the **Company Profiles** sheet (one row per canonical company URL).
+ * **Company Intelligence** holds per-contact briefing (David notes, executive brief, errors).
  */
 
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import * as sheets from '../services/sheets.js';
-import { createPerplexityProvider, createLLMProvider, type LLMProvider } from '../services/llm-provider.js';
+import { createPerplexityProvider, createLLMProvider } from '../services/llm-provider.js';
 import { researchCompany, type CompanyProfile } from '../skills/company-research.js';
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
 import { generateEmailSequence } from '../skills/email-generator.js';
 import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
 import { runFullMergedQC } from './email-qc-runner.js';
-import type { Contact, CompanyIntelligence, ReviewQueueEntry } from '../services/sheets-types.js';
+import type { Contact, CompanyIntelligence, ReviewQueueEntry, StoredCompanyProfile } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
+import { normalizeCanonicalCompanyUrl, researchUrlFromCanonical } from '../utils/normalize-company-url.js';
+import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
+import { companyProfileFromStored, alignmentFromStored, storedProfileHasAlignment } from './company-profile-helpers.js';
+import { mergeContactBriefing } from './contact-briefing.js';
+import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job-mutex.js';
 
-// ─── Mutex ───────────────────────────────────────────────────────────────────
 
-let pipelineRunning = false;
+// ─── Max auto-QC regen ───────────────────────────────────────────────────────
 
-// ─── Max retries for failed stages ───────────────────────────────────────────
-
-const MAX_RETRIES = 3;
 const MAX_AUTO_REGEN_ROUNDS = 2;
 const REQUIRED_SEQUENCE_STEPS = 12;
 
@@ -36,18 +38,16 @@ const REQUIRED_SEQUENCE_STEPS = 12;
 /**
  * Runs a single pipeline cycle. Called by the cron scheduler.
  * Processes contacts in two phases:
- *   Phase A: new → research + alignment
- *   Phase B: ready_for_generation → email gen + quality review
+ *   Phase A: new → company profile (research + alignment) + per-contact intel row
+ *   Phase B: alignment_complete → email gen + quality review
  */
 export async function runPipelineCycle(): Promise<void> {
   if (!config.pipeline.enabled) return;
 
-  if (pipelineRunning) {
-    logger.debug({ module: 'pipeline' }, 'Pipeline cycle skipped: previous run in progress');
+  if (!intelligenceJobTryEnter()) {
+    logger.debug({ module: 'pipeline' }, 'Pipeline cycle skipped: intelligence job already running');
     return;
   }
-
-  pipelineRunning = true;
 
   try {
     const [contacts, intelRows] = await Promise.all([
@@ -55,13 +55,11 @@ export async function runPipelineCycle(): Promise<void> {
       sheets.getCompanyIntelligence(),
     ]);
 
-    // Build lookup for existing intel rows
     const intelByEmail = new Map<string, CompanyIntelligence>();
     for (const row of intelRows) {
       intelByEmail.set(row.contactEmail, row);
     }
 
-    // Phase A: Process new contacts (research + alignment)
     const newContacts = contacts.filter((c) => c.pipelineStatus === 'new' && c.companyUrl);
     if (newContacts.length > 0) {
       logger.info({ module: 'pipeline', count: newContacts.length }, 'Processing new contacts');
@@ -70,16 +68,15 @@ export async function runPipelineCycle(): Promise<void> {
       await processResearchAndAlignment(contact, intelByEmail);
     }
 
-    // Phase B: Process contacts ready for email generation
-    // Re-read intel rows since Phase A may have updated them
     const freshIntel = await sheets.getCompanyIntelligence();
     const freshIntelByEmail = new Map<string, CompanyIntelligence>();
     for (const row of freshIntel) {
       freshIntelByEmail.set(row.contactEmail, row);
     }
 
-    // Phase A sets 'alignment_complete'; that's the trigger for Phase B.
-    const readyContacts = contacts.filter(
+    // Re-read contacts so Phase B sees pipeline_status updates from Phase A in the same cycle.
+    const contactsAfterA = await sheets.getContacts();
+    const readyContacts = contactsAfterA.filter(
       (c) => c.pipelineStatus === 'alignment_complete' || c.pipelineStatus === 'ready_for_generation',
     );
     if (readyContacts.length > 0) {
@@ -89,120 +86,218 @@ export async function runPipelineCycle(): Promise<void> {
       const intel = freshIntelByEmail.get(contact.email);
       if (intel) {
         await processEmailGeneration(contact, intel);
+      } else {
+        logger.warn(
+          { module: 'pipeline', email: contact.email },
+          'Contact ready for generation but no Company Intelligence row — skipping',
+        );
       }
     }
-
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ module: 'pipeline', error: msg }, 'Pipeline cycle error');
   } finally {
-    pipelineRunning = false;
+    intelligenceJobExit();
   }
 }
 
-// ─── Phase A: Research + Alignment ───────────────────────────────────────────
+// ─── Phase A: Research + Alignment (company-scoped) ──────────────────────────
+
+async function ensureContactIntelRow(
+  contact: Contact,
+  canonical: string,
+  displayUrl: string,
+  intelByEmail: Map<string, CompanyIntelligence>,
+  intelPipelineStatus: string,
+): Promise<void> {
+  const existing = intelByEmail.get(contact.email);
+  if (existing) {
+    await sheets.updateCompanyIntelligence(contact.email, existing._rowIndex, {
+      canonicalCompanyUrl: canonical,
+      companyUrl: displayUrl,
+      pipelineStatus: intelPipelineStatus,
+      errorLog: '',
+    });
+    existing.canonicalCompanyUrl = canonical;
+    existing.companyUrl = displayUrl;
+    existing.pipelineStatus = intelPipelineStatus;
+    existing.errorLog = '';
+    return;
+  }
+
+  await sheets.appendCompanyIntelligence({
+    contactEmail: contact.email,
+    canonicalCompanyUrl: canonical,
+    companyUrl: displayUrl,
+    davidProjectNotes: '',
+    executiveBrief: '',
+    pipelineStatus: intelPipelineStatus,
+    generatedDate: '',
+    errorLog: '',
+  });
+  const fresh = await sheets.getCompanyIntelligence();
+  const row = fresh.find((r) => r.contactEmail === contact.email);
+  if (row) intelByEmail.set(contact.email, row);
+}
+
+function appendErrorLog(prev: string, msg: string): string {
+  const existing = prev ? `${prev}\n` : '';
+  return `${existing}[${new Date().toISOString()}] ${msg}`.slice(0, 5000);
+}
+
+async function markCompanyProfileResearchFailed(canonical: string, message: string): Promise<void> {
+  const profiles = await sheets.getCompanyProfiles();
+  const pr = profiles.find((p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonical.toLowerCase());
+  if (!pr) return;
+  await sheets.updateCompanyProfileRow(canonical, pr._rowIndex, {
+    pipelineStatus: 'research_failed',
+    errorLog: appendErrorLog(pr.errorLog, message),
+  });
+}
 
 async function processResearchAndAlignment(
   contact: Contact,
   intelByEmail: Map<string, CompanyIntelligence>,
 ): Promise<void> {
-  const log = { module: 'pipeline', email: contact.email, company: contact.company };
+  const canonical = normalizeCanonicalCompanyUrl(contact.companyUrl);
+  const log = { module: 'pipeline', email: contact.email, company: contact.company, canonical };
+
+  if (!canonical) {
+    await safeUpdateStatus(contact, 'research_failed', 'Missing or invalid company_url');
+    return;
+  }
 
   try {
-    // Update status to researching
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'researching' });
 
-    // Step 1: Research via Perplexity
-    logger.info(log, 'Starting research');
-    const perplexity = createPerplexityProvider(config);
-    const profile = await researchCompany(perplexity, contact.companyUrl);
+    await withCanonicalCompanyLock(canonical, async () => {
+      const profiles = await sheets.getCompanyProfiles();
+      let profileRow = profiles.find(
+        (p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonical.toLowerCase(),
+      );
 
-    // Write research results to Company Intelligence tab
-    const existing = intelByEmail.get(contact.email);
-    const now = new Date().toISOString();
+      const displayUrl = contact.companyUrl.trim();
 
-    if (existing) {
-      await sheets.updateCompanyIntelligence(contact.email, existing._rowIndex, {
-        companyName: profile.company_name,
-        industry: profile.industry,
-        productSummary: profile.product_summary,
-        companySize: profile.company_size || 'unknown',
-        signals: JSON.stringify(profile.signals),
-        signalSummary: profile.signal_summary,
-        pipelineStatus: 'researched',
-        researchedDate: now,
-      });
-    } else {
-      await sheets.appendCompanyIntelligence({
-        contactEmail: contact.email,
-        companyUrl: contact.companyUrl,
-        companyName: profile.company_name,
-        industry: profile.industry,
-        productSummary: profile.product_summary,
-        companySize: profile.company_size || 'unknown',
-        signals: JSON.stringify(profile.signals),
-        signalSummary: profile.signal_summary,
-        deatonCapabilitiesMatched: '',
-        caseStudiesSelected: '',
-        alignmentRationale: '',
-        confidenceScore: '',
-        davidProjectNotes: '',
-        executiveBrief: '',
-        pipelineStatus: 'researched',
-        researchedDate: now,
-        generatedDate: '',
+      if (profileRow && storedProfileHasAlignment(profileRow)) {
+        await ensureContactIntelRow(contact, canonical, displayUrl, intelByEmail, 'alignment_complete');
+        await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
+        logger.info({ ...log }, 'Reused existing company profile');
+        return;
+      }
+
+      if (profileRow && profileRow.pipelineStatus.trim().toLowerCase() === 'no_fit') {
+        await ensureContactIntelRow(contact, canonical, displayUrl, intelByEmail, 'no_fit');
+        await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'no_fit' });
+        logger.info({ ...log }, 'Company already marked no_fit');
+        return;
+      }
+
+      // Resume alignment only if research finished but alignment did not (prior crash).
+      if (profileRow && profileRow.pipelineStatus.trim().toLowerCase() === 'researched') {
+        await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'aligning' });
+        const llm = createLLMProvider(config);
+        const profile = companyProfileFromStored(profileRow);
+        const alignment = await evaluateAlignment(llm, profile);
+        const companyStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
+        await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
+          deatonCapabilitiesMatched: alignment.relevant_capabilities.map((c) => c.capability_name).join(', '),
+          caseStudiesSelected: alignment.selected_case_studies.map((c) => c.case_study_id).join(', '),
+          alignmentRationale: alignment.connection_bridge,
+          confidenceScore: alignment.confidence,
+          pipelineStatus: companyStatus,
+          errorLog: '',
+        });
+        await ensureContactIntelRow(contact, canonical, displayUrl, intelByEmail, companyStatus);
+        await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: companyStatus });
+        logger.info({ ...log, status: companyStatus }, 'Resumed alignment from stored research');
+        return;
+      }
+
+      const perplexity = createPerplexityProvider(config);
+      const researchUrl = researchUrlFromCanonical(canonical) || displayUrl;
+      logger.info({ ...log }, 'Starting company research (shared profile)');
+      const profile = await researchCompany(perplexity, researchUrl);
+      const now = new Date().toISOString();
+
+      if (profileRow) {
+        await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
+          companyUrl: displayUrl,
+          companyName: profile.company_name,
+          industry: profile.industry,
+          productSummary: profile.product_summary,
+          companySize: profile.company_size || 'unknown',
+          signals: JSON.stringify(profile.signals),
+          signalSummary: profile.signal_summary,
+          pipelineStatus: 'researched',
+          researchedDate: now,
+          lastRefreshedAt: now,
+          errorLog: '',
+        });
+      } else {
+        await sheets.appendCompanyProfile({
+          canonicalCompanyUrl: canonical,
+          companyUrl: displayUrl,
+          companyName: profile.company_name,
+          industry: profile.industry,
+          productSummary: profile.product_summary,
+          companySize: profile.company_size || 'unknown',
+          signals: JSON.stringify(profile.signals),
+          signalSummary: profile.signal_summary,
+          deatonCapabilitiesMatched: '',
+          caseStudiesSelected: '',
+          alignmentRationale: '',
+          confidenceScore: '',
+          pipelineStatus: 'researched',
+          researchedDate: now,
+          lastRefreshedAt: now,
+          profileVersion: '1',
+          errorLog: '',
+        });
+      }
+
+      const freshProfiles = await sheets.getCompanyProfiles();
+      profileRow = freshProfiles.find(
+        (p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonical.toLowerCase(),
+      );
+      if (!profileRow) throw new Error('Company profile row missing after research write');
+
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'aligning' });
+      const llm = createLLMProvider(config);
+      const alignment = await evaluateAlignment(llm, profile);
+      const companyStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
+
+      await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
+        deatonCapabilitiesMatched: alignment.relevant_capabilities.map((c) => c.capability_name).join(', '),
+        caseStudiesSelected: alignment.selected_case_studies.map((c) => c.case_study_id).join(', '),
+        alignmentRationale: alignment.connection_bridge,
+        confidenceScore: alignment.confidence,
+        pipelineStatus: companyStatus,
         errorLog: '',
       });
-    }
 
-    // Step 2: Alignment via LLM
-    logger.info(log, 'Starting alignment');
-    await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'aligning' });
+      await ensureContactIntelRow(contact, canonical, displayUrl, intelByEmail, companyStatus);
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: companyStatus });
 
-    const llm = createLLMProvider(config);
-    const alignment = await evaluateAlignment(llm, profile);
-
-    // Re-read the intel row to get the correct row index
-    const freshIntel = await sheets.getCompanyIntelligence();
-    const intelRow = freshIntel.find((r) => r.contactEmail === contact.email);
-    if (!intelRow) throw new Error('Intel row not found after research write');
-
-    // Check for no-fit
-    const newStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
-
-    await sheets.updateCompanyIntelligence(contact.email, intelRow._rowIndex, {
-      deatonCapabilitiesMatched: alignment.relevant_capabilities
-        .map((c) => c.capability_name).join(', '),
-      caseStudiesSelected: alignment.selected_case_studies
-        .map((c) => c.case_study_id).join(', '),
-      alignmentRationale: alignment.connection_bridge,
-      confidenceScore: alignment.confidence,
-      pipelineStatus: newStatus,
+      logger.info({ ...log, status: companyStatus, confidence: alignment.confidence }, 'Research + alignment complete');
     });
-
-    await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: newStatus });
-
-    logger.info({ ...log, status: newStatus, confidence: alignment.confidence }, 'Research + alignment complete');
-
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ ...log, error: msg }, 'Research/alignment failed');
-
-    // Write error and set failed status
+    try {
+      await markCompanyProfileResearchFailed(canonical, msg);
+    } catch {
+      /* best-effort */
+    }
     await safeUpdateStatus(contact, 'research_failed', msg);
   }
 }
 
 // ─── Phase B: Email Generation + Quality Review ──────────────────────────────
 
-async function processEmailGeneration(
-  contact: Contact,
-  intel: CompanyIntelligence,
-): Promise<void> {
+async function processEmailGeneration(contact: Contact, intel: CompanyIntelligence): Promise<void> {
   const log = { module: 'pipeline', email: contact.email, company: contact.company };
 
   try {
-    // Idempotency guard: do not generate twice if an unsent sequence already exists.
     const reviewQueue = await sheets.getReviewQueue();
     if (hasExistingUnloadedSequence(contact.email, reviewQueue)) {
       logger.warn(
@@ -213,37 +308,29 @@ async function processEmailGeneration(
       return;
     }
 
+    const canonKey =
+      intel.canonicalCompanyUrl.trim() || normalizeCanonicalCompanyUrl(contact.companyUrl);
+    if (!canonKey) {
+      throw new Error('Cannot resolve canonical company URL for generation');
+    }
+
+    const profileRows = await sheets.getCompanyProfiles();
+    const stored = profileRows.find((p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonKey.toLowerCase());
+    if (!stored) {
+      throw new Error(`Company profile not found for canonical URL: ${canonKey}`);
+    }
+
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generating' });
 
-    // Reconstruct the company profile from intel data
-    const profile: CompanyProfile = {
-      company_name: intel.companyName,
-      website: intel.companyUrl,
-      industry: intel.industry,
-      product_summary: intel.productSummary,
-      company_size: intel.companySize,
-      signals: safeParseJSON(intel.signals, []),
-      signal_summary: intel.signalSummary,
-      technologies_mentioned: [],
-      key_challenges_inferred: [],
-    };
+    const profile: CompanyProfile = companyProfileFromStored(stored);
+    const alignment: AlignmentResult = alignmentFromStored(stored);
+    const briefing = mergeContactBriefing(contact, intel);
 
-    // Reconstruct alignment from intel data
-    const alignment: AlignmentResult = {
-      relevant_capabilities: intel.deatonCapabilitiesMatched.split(', ')
-        .filter(Boolean)
-        .map((name) => ({ capability_key: name.toLowerCase().replace(/ /g, '_'), capability_name: name, relevance_explanation: '' })),
-      selected_case_studies: intel.caseStudiesSelected.split(', ')
-        .filter(Boolean)
-        .map((id) => ({ case_study_id: id, relevance_rationale: '' })),
-      connection_bridge: intel.alignmentRationale,
-      confidence: intel.confidenceScore as 'high' | 'medium' | 'low',
-      confidence_reasoning: '',
-      no_fit_flag: false,
-      no_fit_reason: null,
-    };
+    const allowlistedCaseStudyIds = stored.caseStudiesSelected
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-    // Generate 12-email sequence
     logger.info(log, 'Generating email sequence');
     const llm = createLLMProvider(config);
     const emailSequence = await generateEmailSequence(
@@ -256,13 +343,9 @@ async function processEmailGeneration(
         title: contact.title,
         company: contact.company,
       },
-      intel.davidProjectNotes,
+      briefing,
     );
 
-    const allowlistedCaseStudyIds = intel.caseStudiesSelected
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
     let sequence = emailSequence;
     const regenAttemptByStep = new Map<number, number>();
 
@@ -273,7 +356,7 @@ async function processEmailGeneration(
       alignment,
       contactTitle: contact.title,
       allowlistedCaseStudyIds,
-      davidProjectNotes: intel.davidProjectNotes,
+      davidProjectNotes: briefing,
     });
 
     for (let round = 1; round <= MAX_AUTO_REGEN_ROUNDS; round++) {
@@ -313,7 +396,7 @@ async function processEmailGeneration(
             stepPurpose: current.purpose,
             originalEmail: { subject: current.subject, body: current.body },
             otherEmails,
-            davidProjectNotes: intel.davidProjectNotes,
+            davidProjectNotes: briefing,
             qcRemediation,
           });
 
@@ -326,7 +409,11 @@ async function processEmailGeneration(
             stepNumber: failedStep.step,
             attemptNumber,
             regenMode: 'auto_qc',
-            inputSourcesUsed: JSON.stringify(['qc_remediation', 'david_project_notes', 'sequence_context']),
+            inputSourcesUsed: JSON.stringify([
+              'qc_remediation',
+              'merged_contact_briefing',
+              'sequence_context',
+            ]),
             triggerReason: 'merged_qc_fail',
             qcIssuesJson: JSON.stringify(failedStep.issues),
             suggestionUsed: (failedStep.suggestion ?? '').slice(0, 200),
@@ -336,8 +423,8 @@ async function processEmailGeneration(
             bodyAfter: rewritten.body,
           });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          logger.warn({ ...log, step: failedStep.step, round, error: msg }, 'Auto regeneration failed for step');
+          const errmsg = err instanceof Error ? err.message : String(err);
+          logger.warn({ ...log, step: failedStep.step, round, error: errmsg }, 'Auto regeneration failed for step');
         }
       }
 
@@ -348,26 +435,23 @@ async function processEmailGeneration(
         alignment,
         contactTitle: contact.title,
         allowlistedCaseStudyIds,
-        davidProjectNotes: intel.davidProjectNotes,
+        davidProjectNotes: briefing,
       });
     }
 
-    // Write emails to Review Queue
     const now = new Date().toISOString();
-    const failedAfterAuto = new Set(
-      qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step),
-    );
+    const failedAfterAuto = new Set(qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step));
     const reviewEntries = sequence.emails.map((email) => {
-      // Annotate with QC flags if present
       const emailReview = qcResult.email_reviews.find((r) => r.step === email.step);
-      const notes = emailReview && !emailReview.pass
-        ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
-        : '';
+      const notes =
+        emailReview && !emailReview.pass
+          ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
+          : '';
       const subject = normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company);
 
       return {
         contactEmail: contact.email,
-        companyName: intel.companyName,
+        companyName: stored.companyName,
         stepNumber: email.step,
         emailPurpose: email.purpose,
         subject,
@@ -389,7 +473,6 @@ async function processEmailGeneration(
 
     await sheets.appendReviewQueueBatch(reviewEntries);
 
-    // Generate executive brief
     const briefParts = [
       `Company: ${profile.company_name}`,
       `Industry: ${profile.industry}`,
@@ -397,16 +480,17 @@ async function processEmailGeneration(
       `Signals: ${profile.signal_summary}`,
       `Deaton Fit: ${alignment.connection_bridge}`,
       `Confidence: ${alignment.confidence}`,
-      `Capabilities Matched: ${intel.deatonCapabilitiesMatched}`,
-      `Case Studies: ${intel.caseStudiesSelected}`,
-      failedAfterAuto.size > 0 ? `Manual Review Required Steps: ${[...failedAfterAuto].sort((a, b) => a - b).join(', ')}` : '',
+      `Capabilities Matched: ${stored.deatonCapabilitiesMatched}`,
+      `Case Studies: ${stored.caseStudiesSelected}`,
+      failedAfterAuto.size > 0
+        ? `Manual Review Required Steps: ${[...failedAfterAuto].sort((a, b) => a - b).join(', ')}`
+        : '',
       qcResult.overall_pass
         ? `QC: PASSED (${qcResult.overall_score})`
         : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,
     ];
     const executiveBrief = briefParts.join('\n\n');
 
-    // Update intel and contact status
     await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
       executiveBrief,
       pipelineStatus: 'complete',
@@ -416,7 +500,6 @@ async function processEmailGeneration(
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'pending_review' });
 
     logger.info({ ...log, qcPass: qcResult.overall_pass }, 'Email generation + QC complete');
-
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ ...log, error: msg }, 'Email generation failed');
@@ -431,7 +514,6 @@ async function safeUpdateStatus(contact: Contact, status: string, error: string)
   try {
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: status });
 
-    // Try to write error to intel tab
     const intel = await sheets.getCompanyIntelligence();
     const row = intel.find((r) => r.contactEmail === contact.email);
     if (row) {
@@ -443,15 +525,6 @@ async function safeUpdateStatus(contact: Contact, status: string, error: string)
     }
   } catch {
     logger.error({ module: 'pipeline', email: contact.email }, 'Failed to write error status');
-  }
-}
-
-/** Parse JSON safely with a fallback. */
-function safeParseJSON<T>(str: string, fallback: T): T {
-  try {
-    return JSON.parse(str) as T;
-  } catch {
-    return fallback;
   }
 }
 

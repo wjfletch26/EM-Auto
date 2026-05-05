@@ -14,12 +14,14 @@ import type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
+  StoredCompanyProfile,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 } from './sheets-types.js';
 import {
   FIELD_TO_COLUMN,
   PROFILE_FIELD_TO_COLUMN,
   INTEL_FIELD_TO_COLUMN,
+  COMPANY_PROFILE_FIELD_TO_COLUMN,
   REVIEW_FIELD_TO_COLUMN,
 } from './sheets-types.js';
 
@@ -28,6 +30,7 @@ export type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
+  StoredCompanyProfile,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 };
 
@@ -474,18 +477,21 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
   );
 }
 
-// ─── Company Intelligence Tab ────────────────────────────────────────────────
+// ─── Company Profiles Tab ─────────────────────────────────────────────────────
 
-/** Reads all rows from the Company Intelligence tab. */
-export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
+/** Reads company-level research rows (one per canonical URL). */
+export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Company Intelligence'!A2:R" })
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Profiles'!A2:Q",
+    }),
   );
 
   const rows = res.data.values || [];
   return rows.map((row, i) => ({
-    contactEmail: row[0]?.trim().toLowerCase() || '',
+    canonicalCompanyUrl: row[0]?.trim() || '',
     companyUrl: row[1] || '',
     companyName: row[2] || '',
     industry: row[3] || '',
@@ -497,36 +503,139 @@ export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
     caseStudiesSelected: row[9] || '',
     alignmentRationale: row[10] || '',
     confidenceScore: row[11] || '',
-    davidProjectNotes: row[12] || '',
-    executiveBrief: row[13] || '',
-    pipelineStatus: row[14] || '',
-    researchedDate: row[15] || '',
-    generatedDate: row[16] || '',
-    errorLog: row[17] || '',
+    pipelineStatus: row[12] || '',
+    researchedDate: row[13] || '',
+    lastRefreshedAt: row[14] || '',
+    profileVersion: row[15] || '',
+    errorLog: row[16] || '',
     _rowIndex: i + 2,
   }));
 }
 
-/** Appends a new row to the Company Intelligence tab. */
+/** Appends a new Company Profiles row after successful research bootstrap. */
+export async function appendCompanyProfile(entry: Omit<StoredCompanyProfile, '_rowIndex'>): Promise<void> {
+  const sheets = await getClient();
+  await withRetry(() =>
+    sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Profiles'!A:Q",
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[
+          entry.canonicalCompanyUrl,
+          entry.companyUrl,
+          entry.companyName,
+          entry.industry,
+          entry.productSummary,
+          entry.companySize,
+          entry.signals,
+          entry.signalSummary,
+          entry.deatonCapabilitiesMatched,
+          entry.caseStudiesSelected,
+          entry.alignmentRationale,
+          entry.confidenceScore,
+          entry.pipelineStatus,
+          entry.researchedDate,
+          entry.lastRefreshedAt,
+          entry.profileVersion,
+          entry.errorLog,
+        ]],
+      },
+    }),
+  );
+  logger.info({ module: 'sheets', canonicalUrl: entry.canonicalCompanyUrl }, 'Company profile row appended');
+}
+
+/**
+ * Updates fields on one Company Profiles row by row index (row 2 = first data row).
+ * Keeps canonical URL in column A stable after insert — do not remap companies here.
+ */
+export async function updateCompanyProfileRow(
+  canonicalCompanyUrlForLog: string,
+  rowIndex: number,
+  updates: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>>,
+): Promise<void> {
+  const sheets = await getClient();
+  const data: sheets_v4.Schema$ValueRange[] = [];
+
+  for (const [field, value] of Object.entries(updates)) {
+    const col =
+      COMPANY_PROFILE_FIELD_TO_COLUMN[field as keyof Omit<StoredCompanyProfile, '_rowIndex'>];
+    if (!col) continue;
+    data.push({
+      range: `'Company Profiles'!${col}${rowIndex}`,
+      values: [[value ?? '']],
+    });
+  }
+
+  if (data.length === 0) return;
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data },
+    }),
+  );
+
+  logger.info(
+    {
+      module: 'sheets',
+      canonicalUrl: canonicalCompanyUrlForLog,
+      fields: Object.keys(updates),
+    },
+    'Company profile updated',
+  );
+}
+
+// ─── Company Intelligence Tab ────────────────────────────────────────────────
+
+/** Reads per-contact linkage + briefing rows. */
+export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
+  const sheets = await getClient();
+  const res = await withRetry(() =>
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Intelligence'!A2:H",
+    }),
+  );
+
+  const rows = res.data.values || [];
+  return rows.map((row, i) => ({
+    contactEmail: row[0]?.trim().toLowerCase() || '',
+    canonicalCompanyUrl: row[1]?.trim() || '',
+    companyUrl: row[2] || '',
+    davidProjectNotes: row[3] || '',
+    executiveBrief: row[4] || '',
+    pipelineStatus: row[5] || '',
+    generatedDate: row[6] || '',
+    errorLog: row[7] || '',
+    _rowIndex: i + 2,
+  }));
+}
+
+/** Appends a Company Intelligence row (one row per pipeline contact). */
 export async function appendCompanyIntelligence(entry: Omit<CompanyIntelligence, '_rowIndex'>): Promise<void> {
   const sheets = await getClient();
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Company Intelligence'!A:R",
+      range: "'Company Intelligence'!A:H",
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
         values: [[
-          entry.contactEmail, entry.companyUrl, entry.companyName,
-          entry.industry, entry.productSummary, entry.companySize,
-          entry.signals, entry.signalSummary, entry.deatonCapabilitiesMatched,
-          entry.caseStudiesSelected, entry.alignmentRationale, entry.confidenceScore,
-          entry.davidProjectNotes, entry.executiveBrief, entry.pipelineStatus,
-          entry.researchedDate, entry.generatedDate, entry.errorLog,
+          entry.contactEmail,
+          entry.canonicalCompanyUrl,
+          entry.companyUrl,
+          entry.davidProjectNotes,
+          entry.executiveBrief,
+          entry.pipelineStatus,
+          entry.generatedDate,
+          entry.errorLog,
         ]],
       },
-    })
+    }),
   );
   logger.info({ module: 'sheets', email: entry.contactEmail }, 'Company intelligence row appended');
 }

@@ -102,6 +102,9 @@ export function buildRawConfig() {
     pipeline: {
       enabled: env.PIPELINE_ENABLED,
       cron: env.PIPELINE_CRON,
+      companyRefreshCron: env.PIPELINE_COMPANY_REFRESH_CRON,
+      companyRefreshEnabled: env.PIPELINE_COMPANY_REFRESH_ENABLED,
+      companyStaleAfterDays: env.PIPELINE_COMPANY_STALE_AFTER_DAYS,
     },
     perplexity: {
       apiKey: env.PERPLEXITY_API_KEY,

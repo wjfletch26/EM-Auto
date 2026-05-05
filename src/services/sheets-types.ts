@@ -178,11 +178,12 @@ export interface ContactAppendPayload {
   pipelineStatus?: string;
 }
 
-// ─── Company Intelligence Tab Types ──────────────────────────────────────────
+// ─── Company Profiles Tab (one row per canonical company URL) ───────────────
 
-/** A row from the Company Intelligence tab. */
-export interface CompanyIntelligence {
-  contactEmail: string;
+/** Shared research + alignment for all contacts at a company — see docs/DATA_MODEL.md. */
+export interface StoredCompanyProfile {
+  canonicalCompanyUrl: string;
+  /** Display URL as entered by operators (research uses canonical). */
   companyUrl: string;
   companyName: string;
   industry: string;
@@ -194,39 +195,24 @@ export interface CompanyIntelligence {
   caseStudiesSelected: string;
   alignmentRationale: string;
   confidenceScore: string;
-  davidProjectNotes: string;
-  executiveBrief: string;
+  /** Company-level pipeline: researched, aligning, alignment_complete, no_fit, research_failed, refresh_failed */
   pipelineStatus: string;
   researchedDate: string;
-  generatedDate: string;
+  /** ISO timestamp of last successful refresh (initial research counts as first refresh). */
+  lastRefreshedAt: string;
+  profileVersion: string;
   errorLog: string;
   /** 1-indexed row number in the sheet. */
   _rowIndex: number;
 }
 
-/** Fields the pipeline (and admin UI) can update on a Company Intelligence row. */
-export interface CompanyIntelUpdate {
-  companyName: string;
-  industry: string;
-  productSummary: string;
-  companySize: string;
-  signals: string;
-  signalSummary: string;
-  deatonCapabilitiesMatched: string;
-  caseStudiesSelected: string;
-  alignmentRationale: string;
-  confidenceScore: string;
-  /** Column M — operator / David notes passed into email generation. */
-  davidProjectNotes: string;
-  executiveBrief: string;
-  pipelineStatus: string;
-  researchedDate: string;
-  generatedDate: string;
-  errorLog: string;
-}
-
-/** Maps CompanyIntelUpdate fields to column letters in Company Intelligence tab. */
-export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
+/** Maps StoredCompanyProfile field names → column letters (row 2+). */
+export const COMPANY_PROFILE_FIELD_TO_COLUMN: Record<
+  keyof Omit<StoredCompanyProfile, '_rowIndex'>,
+  string
+> = {
+  canonicalCompanyUrl: 'A',
+  companyUrl: 'B',
   companyName: 'C',
   industry: 'D',
   productSummary: 'E',
@@ -237,12 +223,51 @@ export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
   caseStudiesSelected: 'J',
   alignmentRationale: 'K',
   confidenceScore: 'L',
-  davidProjectNotes: 'M',
-  executiveBrief: 'N',
-  pipelineStatus: 'O',
-  researchedDate: 'P',
-  generatedDate: 'Q',
-  errorLog: 'R',
+  pipelineStatus: 'M',
+  researchedDate: 'N',
+  lastRefreshedAt: 'O',
+  profileVersion: 'P',
+  errorLog: 'Q',
+};
+
+// ─── Company Intelligence Tab (per contact — briefing + linkage) ─────────────
+
+/** A row from the Company Intelligence tab — joins contact_email ↔ canonical_company_url. */
+export interface CompanyIntelligence {
+  contactEmail: string;
+  canonicalCompanyUrl: string;
+  /** Copy of Contacts.company_url for display; may differ slightly from canonical. */
+  companyUrl: string;
+  davidProjectNotes: string;
+  executiveBrief: string;
+  /** Mirrors contact pipeline milestones for operator visibility (generation phase). */
+  pipelineStatus: string;
+  generatedDate: string;
+  errorLog: string;
+  /** 1-indexed row number in the sheet. */
+  _rowIndex: number;
+}
+
+/** Fields the pipeline (and admin UI) can update on a Company Intelligence row. */
+export interface CompanyIntelUpdate {
+  canonicalCompanyUrl: string;
+  companyUrl: string;
+  davidProjectNotes: string;
+  executiveBrief: string;
+  pipelineStatus: string;
+  generatedDate: string;
+  errorLog: string;
+}
+
+/** Maps CompanyIntelUpdate fields to column letters in Company Intelligence tab (A–H). */
+export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
+  canonicalCompanyUrl: 'B',
+  companyUrl: 'C',
+  davidProjectNotes: 'D',
+  executiveBrief: 'E',
+  pipelineStatus: 'F',
+  generatedDate: 'G',
+  errorLog: 'H',
 };
 
 // ─── Review Queue Tab Types ──────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import { regenerateReviewQueueRow } from '../../ops/regenerate-review-queue-row.
 import {
   deleteReviewQueueRow,
   getCompanyIntelligence,
+  getCompanyProfiles,
   getContacts,
   getReviewQueue,
   updateCompanyIntelligence,
@@ -121,12 +122,18 @@ export function createDashboardRouter(): Router {
     '/snapshot',
     ...guard,
     wrap(async (_req, res) => {
-      const [contacts, intel, queue] = await Promise.all([getContacts(), getCompanyIntelligence(), getReviewQueue()]);
+      const [contacts, intel, queue, profiles] = await Promise.all([
+        getContacts(),
+        getCompanyIntelligence(),
+        getReviewQueue(),
+        getCompanyProfiles(),
+      ]);
       res.set('Cache-Control', 'no-store');
       res.json({
-        summary: buildDashboardSummary(contacts, intel, queue),
+        summary: buildDashboardSummary(contacts, intel, queue, profiles),
         contacts,
         intelligence: intel,
+        companyProfiles: profiles,
         reviewQueue: queue,
       });
     }),

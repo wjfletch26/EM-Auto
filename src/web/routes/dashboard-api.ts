@@ -9,6 +9,7 @@ import type { RequestHandler } from 'express';
 import { logger } from '../../logging/logger.js';
 import {
   getCompanyIntelligence,
+  getCompanyProfiles,
   getContacts,
   getReviewQueue,
 } from '../../services/sheets.js';
@@ -16,12 +17,13 @@ import { buildDashboardSummary } from '../dashboard-summary.js';
 
 export const dashboardSummaryHandler: RequestHandler = async (_req, res) => {
   try {
-    const [contacts, intel, queue] = await Promise.all([
+    const [contacts, intel, queue, profiles] = await Promise.all([
       getContacts(),
       getCompanyIntelligence(),
       getReviewQueue(),
+      getCompanyProfiles(),
     ]);
-    const body = buildDashboardSummary(contacts, intel, queue);
+    const body = buildDashboardSummary(contacts, intel, queue, profiles);
     res.status(200).json(body);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

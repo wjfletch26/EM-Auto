@@ -4,11 +4,7 @@
 
 The system uses **Google Sheets** as the primary data store and **local JSON files** for crash-recovery state. There is no database at MVP.
 
-The Google Spreadsheet contains four tabs (worksheets):
-1. **Contacts** — Master contact list with status tracking
-2. **Campaigns** — Campaign and sequence definitions
-3. **Send Log** — Record of every email sent
-4. **Reply Log** — Record of every reply classified
+The Google Spreadsheet contains the outreach tabs documented below (minimal list): **Contacts**, **Campaigns**, **Send Log**, **Reply Log**, plus pipeline tabs **Company Profiles** (shared company intelligence), **Company Intelligence** (per-contact briefing/linkage), **Review Queue**, etc. See [`scripts/setup-sheets.ts`](../scripts/setup-sheets.ts) for the canonical header rows.
 
 ---
 
@@ -116,6 +112,49 @@ Append-only log of every classified reply. Written by the reply processor (autom
 | D | `subject_snippet` | string | First 100 characters of the reply subject. | `Re: Quick question, John` |
 | E | `body_snippet` | string | First 200 characters of the reply body. | `Hi Dave, yes I'm interested in...` |
 | F | `source` | string | How this was classified: `auto` (system) or `manual` (human). | `auto` |
+
+---
+
+### Tab: Company Profiles
+
+**One row per canonical company website** (shared by every contact at that company). Perplexity research and Deaton alignment write here. Refreshed by the monthly profile refresh job.
+
+| Column | Header | Notes |
+|---|---|---|
+| A | `canonical_company_url` | Stable key from URL normalization (see code: `normalizeCanonicalCompanyUrl`) |
+| B | `company_url` | Operator-facing URL (often same as canonical) |
+| C | `company_name` | From research |
+| D | `industry` | From research |
+| E | `product_summary` | From research |
+| F | `company_size` | From research |
+| G | `signals` | JSON array string |
+| H | `signal_summary` | Text |
+| I | `deaton_capabilities_matched` | From alignment |
+| J | `case_studies_selected` | From alignment |
+| K | `alignment_rationale` | From alignment |
+| L | `confidence_score` | From alignment (`high` / `medium` / `low`) |
+| M | `pipeline_status` | Company-level lifecycle (`alignment_complete`, `no_fit`, `research_failed`, …) |
+| N | `researched_date` | ISO timestamp (first successful research) |
+| O | `last_refreshed_at` | ISO timestamp of latest successful refresh |
+| P | `profile_version` | Integer string; bump on each successful refresh |
+| Q | `error_log` | Company-level errors |
+
+### Tab: Company Intelligence
+
+**One row per contact** in the pipeline: linkage to Company Profiles plus per-contact briefing.
+
+| Column | Header | Notes |
+|---|---|---|
+| A | `contact_email` | Must match Contacts.email |
+| B | `canonical_company_url` | Join key → Company Profiles column A |
+| C | `company_url` | Copy from Contacts for display |
+| D | `david_project_notes` | Highest-priority personalization notes for generation/QC |
+| E | `executive_brief` | Written after Phase B completes |
+| F | `pipeline_status` | Operator-visible mirror during generation (`complete`, failures, …) |
+| G | `generated_date` | When drafts landed in Review Queue |
+| H | `error_log` | Contact-level intelligence errors |
+
+**Migration:** spreadsheets created under the old schema (single wide Company Intelligence tab with duplicated research columns per contact) must add **Company Profiles**, reshape **Company Intelligence** to columns A–H, and dedupe shared research rows. See operational notes in repo specs (`specs/MIGRATION_COMPANY_PROFILES.md`).
 
 ---
 

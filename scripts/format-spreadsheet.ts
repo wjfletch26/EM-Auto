@@ -56,9 +56,13 @@ const SHEET_LAYOUTS: Record<
   },
   'Send Log': { colCount: 8, userBodyColumnIndices: [] },
   'Reply Log': { colCount: 6, userBodyColumnIndices: [] },
+  'Company Profiles': {
+    colCount: 17,
+    userBodyColumnIndices: [1, 15, 16],
+  },
   'Company Intelligence': {
-    colCount: 18,
-    userBodyColumnIndices: [0, 1, 12, 14],
+    colCount: 8,
+    userBodyColumnIndices: [0, 1, 2, 3, 5],
   },
   'Review Queue': {
     colCount: 16,
