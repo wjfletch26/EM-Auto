@@ -9,21 +9,26 @@ Use it when you want to quickly verify the system still works.
 
 Use this mode to test safely against a sandbox sheet before deploying to VPS.
 
+Full env rules live in [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md). The short version:
+
 1. Create a test spreadsheet copy in Google Sheets.
 2. Share it with the service account in `credentials/service-account.json`.
-3. Create a local-only `.env.local` file (gitignored) with:
+3. In **`.env`** (shared secrets): set `APP_ENV=local`, `GOOGLE_SPREADSHEET_ID` to your **test** sheet ID, and **`PRODUCTION_GOOGLE_SPREADSHEET_ID`** to the real production sheet ID (must differ from `GOOGLE_SPREADSHEET_ID` when `APP_ENV` is local).
+4. Email safety on local/staging (validated at startup): either **`DRY_RUN=true`** (simulated send — no SMTP, Sheets still update), **or** **`DRY_RUN=false`** with a valid **`TEST_RECIPIENT`** (real SMTP only to that inbox).
+5. Optionally create **`.env.local`** (gitignored) for overrides: the app loads **`.env`** then **`.env.${APP_ENV}`** when that file exists — so with `APP_ENV=local`, `.env.local` overrides `.env`.
+
+Example overrides you might put only in `.env.local`:
 
 ```bash
 GOOGLE_SPREADSHEET_ID=<TEST_SPREADSHEET_ID>
-TEST_RECIPIENT=<your-email>
+DRY_RUN=true
 LOG_LEVEL=debug
 ```
 
 How it works:
 
-- The app loads `.env` first.
-- If `.env.local` exists, it overrides matching values for local runs only.
-- VPS behavior is unchanged unless you also create `.env.local` on the VPS.
+- Put `APP_ENV` in `.env` so the correct second file is chosen (see ENVIRONMENT_VARIABLES.md).
+- VPS stays isolated unless you deploy `.env.local` there.
 
 Suggested local flow:
 
@@ -35,7 +40,7 @@ npx tsx scripts/test-send-cycle.ts
 ```
 
 Verify that updates appear in the **test** spreadsheet, not production.
-When finished, delete or rename `.env.local` to return to default `.env` values.
+When finished, delete or rename `.env.local` to drop local-only overrides.
 
 ---
 
