@@ -55,12 +55,17 @@ export function startWebServer(port = config.unsub.port): Server {
   const unsubscribeRateLimiter = createRateLimiterMiddleware();
 
   const publicRoot = path.join(process.cwd(), 'public');
+  const dashboardDir = path.join(publicRoot, 'dashboard');
 
   // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());
-  app.use('/dashboard', express.static(path.join(publicRoot, 'dashboard'), { index: 'index.html' }));
+  // Bare `/dashboard` does not always resolve to `index.html` with every static middleware + proxy combo; force the directory URL.
+  app.get('/dashboard', (_req, res) => {
+    res.redirect(308, '/dashboard/');
+  });
+  app.use('/dashboard/', express.static(dashboardDir, { index: 'index.html' }));
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
