@@ -39,7 +39,11 @@ This is the main operational tab. Each row is one contact.
 | U | `custom_2` | string | Optional custom field for templates. | `(any value)` |
 | V | `notes` | string | Operator notes. Not used by the system. | `Met at trade show` |
 | W | `company_url` | string | Company website URL (intelligence pipeline). | `https://acme.com` |
-| X | `pipeline_status` | string | Pipeline state for AI-generated sequences (e.g. `new`, `alignment_complete`). | `new` |
+| X | `pipeline_status` | string | Pipeline state for AI-generated sequences (e.g. `new`, `alignment_complete`). See **Upstream gate** below for `company_intelligence_blocked`. | `new` |
+
+**Upstream sequence gate (Track B):** When [`evaluateSequenceGenerationGate`](../src/engine/sequence-generation-gate.ts) fails before email generation, the pipeline sets **`company_intelligence_blocked`** on this column and appends a single-line **`[UPSTREAM_GATE] code=<REASON>`** message to **Company Intelligence** `error_log` (shared company row is not repurposed as a per-contact gate). Primary reason codes include: `LOW_ALIGNMENT_CONFIDENCE`, `MISSING_CASE_STUDY_SELECTION`, `MISSING_PRODUCT_SUMMARY`, `MISSING_SIGNAL_SUMMARY`, `INVALID_CANONICAL_URL`, `DUPLICATE_COMPANY_PROFILE_KEY`, `NO_FIT`, `COMPANY_PROFILE_NOT_READY`. After fixing data or config, operators may clear the block via **Admin API** `POST /api/admin/actions/contacts/:email/clear-intelligence-block` (sets contact back to `alignment_complete` and strips upstream gate lines from Intel `error_log`).
+
+**Research / alignment phase:** When Phase A ([`processResearchAndAlignment`](../src/engine/pipeline-orchestrator.ts)) cannot finish (invalid URL, Perplexity/JSON/schema errors, sheet write issues, or alignment LLM failure), the contact is set to **`research_failed`** and Intel **`error_log`** receives **`[RESEARCH_PHASE] code=<REASON>`** plus a short detail string. Codes include `INVALID_CANONICAL_URL`, `RESEARCH_RESPONSE_INVALID_JSON`, `RESEARCH_RESPONSE_SCHEMA_INVALID`, `RESEARCH_API_ERROR`, `ALIGNMENT_EVALUATION_FAILED`, `PROFILE_ROW_MISSING_AFTER_WRITE`, `SHEETS_WRITE_FAILED`, `RESEARCH_PHASE_UNKNOWN`. The shared **Company Profiles** row (if it exists) is also moved to **`research_failed`** with the same line in its **`error_log`** when the failure is attributed to that company key. Monthly refresh uses the same prefix when setting **`refresh_failed`** on the profile row only.
 
 **Key rules:**
 - `email` is the primary key. Must be unique across all rows. The admin UI does not support changing email in place (append a new row instead).
@@ -154,7 +158,7 @@ Append-only log of every classified reply. Written by the reply processor (autom
 | E | `executive_brief` | Written after Phase B completes |
 | F | `pipeline_status` | Operator-visible mirror during generation (`complete`, failures, …) |
 | G | `generated_date` | When drafts landed in Review Queue |
-| H | `error_log` | Contact-level intelligence errors |
+| H | `error_log` | Contact-level intelligence errors (including upstream gate lines prefixed `[UPSTREAM_GATE]`). |
 
 **Migration:** spreadsheets created under the old schema (single wide Company Intelligence tab with duplicated research columns per contact) must add **Company Profiles**, reshape **Company Intelligence** to columns A–H, and dedupe shared research rows. See operational notes in repo specs (`specs/MIGRATION_COMPANY_PROFILES.md`).
 

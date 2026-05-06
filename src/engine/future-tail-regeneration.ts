@@ -14,6 +14,12 @@ import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regen
 import type { Contact, CompanyIntelligence, ReviewQueueEntry, Campaign } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
 import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
+import { duplicateCanonicalUrlsLowercased } from '../utils/canonical-sheet-audit.js';
+import {
+  evaluateSequenceGenerationGate,
+  formatUpstreamGateErrorLog,
+  formatGenerationLineageLine,
+} from './sequence-generation-gate.js';
 import { companyProfileFromStored, alignmentFromStored } from './company-profile-helpers.js';
 import { mergeContactBriefing } from './contact-briefing.js';
 import { runFullMergedQC } from './email-qc-runner.js';
@@ -146,6 +152,34 @@ export async function processFutureTailRegeneration(
       throw new Error(`Company profile not found for canonical URL: ${canonKey}`);
     }
 
+    const dupLower = duplicateCanonicalUrlsLowercased(profileRows);
+    const gateResult = evaluateSequenceGenerationGate(
+      contact,
+      stored,
+      canonKey,
+      dupLower,
+      config.generationGate,
+    );
+    if (!gateResult.ok) {
+      const line = formatUpstreamGateErrorLog(gateResult.reasonCode, gateResult.details);
+      const intelRow =
+        intel ?? (await sheets.getCompanyIntelligence()).find((r) => r.contactEmail === emailNorm);
+      if (intelRow) {
+        const prev = intelRow.errorLog?.trim() ? `${intelRow.errorLog.trim()}\n` : '';
+        await sheets.updateCompanyIntelligence(contact.email, intelRow._rowIndex, {
+          errorLog: `${prev}${line}`.slice(0, 5000),
+        });
+      }
+      await sheets.updateContact(contact.email, contact._rowIndex, {
+        pipelineStatus: 'company_intelligence_blocked',
+      });
+      logger.info(
+        { ...log, event: 'upstream_gate_block', reasonCode: gateResult.reasonCode },
+        'Future tail blocked by upstream gate',
+      );
+      return;
+    }
+
     const profileVersion = parseProfileVersionInt(stored.profileVersion);
     const lastUsed = parseProfileVersionInt(contact.lastProfileVersionUsedForGeneration);
 
@@ -263,6 +297,17 @@ export async function processFutureTailRegeneration(
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+
+    logger.info(
+      {
+        ...log,
+        event: 'future_tail_generation_start',
+        profileVersion: stored.profileVersion.trim() || '1',
+        promptVersion: config.lineage.promptVersion,
+        qcRubricVersion: config.lineage.qcRubricVersion,
+      },
+      'Starting future-tail sequence generation',
+    );
 
     let tailGenerated: GeneratedEmail[] = [];
     if (stepsToGenerate.length > 0) {
@@ -401,10 +446,17 @@ export async function processFutureTailRegeneration(
     const reviewEntries = stepsToGenerate.map((stepNumber) => {
       const email = sequence.emails.find((e) => e.step === stepNumber)!;
       const emailReview = qcResult.email_reviews.find((r) => r.step === stepNumber);
-      const notes =
+      const qcNotes =
         emailReview && !emailReview.pass
           ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
           : '';
+      const lineageStamp = formatGenerationLineageLine({
+        profileVersion: String(profileVersion),
+        promptVersion: config.lineage.promptVersion,
+        qcRubricVersion: config.lineage.qcRubricVersion,
+        alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
+      });
+      const reviewerNotes = [lineageStamp, qcNotes].filter(Boolean).join('\n');
       const subject = replaceEmDashesWithPlainHyphen(
         normalizeGeneratedSubject(email.subject, email.purpose, stepNumber, contact.company),
       );
@@ -419,7 +471,7 @@ export async function processFutureTailRegeneration(
           replaceEmDashesWithPlainHyphen(normalizeGreetingBody(email.body, contact.firstName)),
         ),
         status: 'pending_review',
-        reviewerNotes: notes,
+        reviewerNotes,
         generatedDate: now,
         approvedDate: '',
         campaignId: '',
@@ -444,13 +496,19 @@ export async function processFutureTailRegeneration(
     });
 
     if (intel) {
+      const lineageStamp = formatGenerationLineageLine({
+        profileVersion: String(profileVersion),
+        promptVersion: config.lineage.promptVersion,
+        qcRubricVersion: config.lineage.qcRubricVersion,
+        alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
+      });
       const briefParts = [
         `Company: ${profile.company_name}`,
         `Future tail regeneration (profile v${profileVersion}) steps: ${stepsToGenerate.join(', ') || '(none — all tail approved)'}`,
         qcResult.overall_pass ? `QC: PASSED (${qcResult.overall_score})` : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,
       ];
       await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
-        executiveBrief: briefParts.join('\n\n'),
+        executiveBrief: [lineageStamp, briefParts.join('\n\n')].join('\n\n'),
         pipelineStatus: 'complete',
         generatedDate: now,
       });

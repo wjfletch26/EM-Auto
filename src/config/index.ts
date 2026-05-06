@@ -106,6 +106,17 @@ export function buildRawConfig() {
       companyRefreshEnabled: env.PIPELINE_COMPANY_REFRESH_ENABLED,
       companyStaleAfterDays: env.PIPELINE_COMPANY_STALE_AFTER_DAYS,
     },
+    generationGate: {
+      minAlignmentConfidence: env.GENERATION_MIN_ALIGNMENT_CONFIDENCE,
+      blockOnEmptyCaseStudies: env.GENERATION_BLOCK_ON_EMPTY_CASE_STUDIES,
+      requireProductSummary: env.GENERATION_REQUIRE_PRODUCT_SUMMARY,
+      requireSignalSummary: env.GENERATION_REQUIRE_SIGNAL_SUMMARY,
+      requireParsableSignalsJson: env.GENERATION_REQUIRE_PARSABLE_SIGNALS_JSON,
+    },
+    lineage: {
+      promptVersion: env.PROMPT_VERSION,
+      qcRubricVersion: env.QC_RUBRIC_VERSION,
+    },
     perplexity: {
       apiKey: env.PERPLEXITY_API_KEY,
       model: env.PERPLEXITY_MODEL,
@@ -208,6 +219,8 @@ export function getRedactedConfig(): Record<string, unknown> {
       uiEnabled: config.admin.uiEnabled,
     },
     pipeline: config.pipeline,
+    generationGate: config.generationGate,
+    lineage: config.lineage,
     perplexity: {
       apiKey: config.perplexity.apiKey ? '***REDACTED***' : '(not set)',
       model: config.perplexity.model,

@@ -150,6 +150,174 @@
       const rq = data.reviewQueue;
       document.getElementById('metric-queue-total').textContent = String(rq.total);
       document.getElementById('breakdown-queue').innerHTML = renderBars(rq.status);
+
+      const ug = data.upstreamGate || { blockedContactCount: 0, blockedByReason: {}, samples: [] };
+      const mUb = document.getElementById('metric-upstream-blocked');
+      if (mUb) mUb.textContent = String(ug.blockedContactCount ?? 0);
+      const brUp = document.getElementById('breakdown-upstream-reasons');
+      if (brUp) {
+        const counts = ug.blockedByReason || {};
+        brUp.innerHTML =
+          ug.blockedContactCount > 0
+            ? renderBars(counts)
+            : '<p class="muted">No contacts in company_intelligence_blocked.</p>';
+      }
+
+      const rp = data.researchPhase || {};
+      const mRc = document.getElementById('metric-research-failed-contacts');
+      if (mRc) mRc.textContent = String(rp.contactsResearchFailed ?? 0);
+      const mRp = document.getElementById('metric-research-failed-profiles');
+      if (mRp) mRp.textContent = String(rp.profilesResearchOrRefreshFailed ?? 0);
+
+      const brCr = document.getElementById('breakdown-research-contact-reasons');
+      if (brCr) {
+        const counts = rp.contactFailuresByReason || {};
+        brCr.innerHTML =
+          (rp.contactsResearchFailed ?? 0) > 0
+            ? renderBars(counts)
+            : '<p class="muted">No contacts in research_failed.</p>';
+      }
+      const brPr = document.getElementById('breakdown-research-profile-reasons');
+      if (brPr) {
+        const counts = rp.profileFailuresByReason || {};
+        brPr.innerHTML =
+          (rp.profilesResearchOrRefreshFailed ?? 0) > 0
+            ? renderBars(counts)
+            : '<p class="muted">No company profiles in research_failed or refresh_failed.</p>';
+      }
+      const rcsBody = document.getElementById('research-contact-samples-body');
+      if (rcsBody) {
+        const rows = rp.contactSamples || [];
+        if (rows.length === 0) {
+          rcsBody.innerHTML = '<tr><td colspan="4" class="muted">No samples.</td></tr>';
+        } else {
+          rcsBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td>${escapeHtml(row.contactEmail)}</td><td class="mono">${escapeHtml(
+                  row.canonicalUrl || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.preview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
+      const rpsBody = document.getElementById('research-profile-samples-body');
+      if (rpsBody) {
+        const rows = rp.profileSamples || [];
+        if (rows.length === 0) {
+          rpsBody.innerHTML = '<tr><td colspan="4" class="muted">No samples.</td></tr>';
+        } else {
+          rpsBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td class="mono">${escapeHtml(row.canonicalUrl)}</td><td>${escapeHtml(
+                  row.pipelineStatus || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.preview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
+
+      const ch = data.companyHealth || { rows: [], truncated: false };
+      const chNote = document.getElementById('company-health-truncated');
+      if (chNote) {
+        if (ch.truncated) {
+          chNote.hidden = false;
+          chNote.textContent = `Showing first ${ch.rows.length} canonical rows (list truncated on server).`;
+        } else {
+          chNote.hidden = true;
+          chNote.textContent = '';
+        }
+      }
+      const chBody = document.getElementById('company-health-body');
+      if (chBody) {
+        if (!ch.rows || ch.rows.length === 0) {
+          chBody.innerHTML =
+            '<tr><td colspan="8" class="muted">No canonical keys in this snapshot (no contacts / profiles loaded).</td></tr>';
+        } else {
+          chBody.innerHTML = ch.rows
+            .map((row) => {
+              const p = row.profile;
+              const reasons = row.blockedByReason || {};
+              const reasonStr = sortedEntries(reasons)
+                .map(([k, n]) => `${escapeHtml(k)}: ${n}`)
+                .join(', ');
+              return `<tr>
+                <td class="mono">${escapeHtml(row.canonicalUrl)}</td>
+                <td>${escapeHtml(p ? p.pipelineStatus || '—' : '—')}</td>
+                <td>${escapeHtml(p ? p.confidenceScore || '—' : '—')}</td>
+                <td class="mono">${escapeHtml(p ? p.profileVersion || '—' : '—')}</td>
+                <td class="mono small">${escapeHtml(p ? (p.lastRefreshedAt || '').slice(0, 19) || '—' : '—')}</td>
+                <td>${row.duplicateProfileKey ? 'yes' : '—'}</td>
+                <td>${row.blockedContactsTotal}</td>
+                <td class="small">${reasonStr || '—'}</td>
+              </tr>`;
+            })
+            .join('');
+        }
+      }
+
+      const ca = data.canonicalAudit || { duplicateProfileKeys: [], intelDrift: [], intelDriftTruncated: false };
+      const caMount = document.getElementById('canonical-audit-mount');
+      if (caMount) {
+        const dups = ca.duplicateProfileKeys || [];
+        const drift = ca.intelDrift || [];
+        let html = '';
+        if (dups.length === 0 && drift.length === 0) {
+          html = '<p class="muted">No duplicate profile keys or intel drift in this snapshot.</p>';
+        } else {
+          if (dups.length > 0) {
+            html += '<h3 class="small-heading">Duplicate Company Profiles keys</h3><ul class="compact-list">';
+            html += dups
+              .map(
+                (d) =>
+                  `<li><span class="mono">${escapeHtml(d.canonicalUrl)}</span> — rows ${escapeHtml(
+                    (d.rowIndices || []).join(', '),
+                  )}</li>`,
+              )
+              .join('');
+            html += '</ul>';
+          }
+          if (drift.length > 0) {
+            html += `<h3 class="small-heading">Intel canonical drift${ca.intelDriftTruncated ? ' (truncated)' : ''}</h3>`;
+            html += '<div class="table-scroll"><table><thead><tr><th>Contact</th><th>Intel B</th><th>Expected</th><th>Row</th></tr></thead><tbody>';
+            html += drift
+              .map(
+                (r) =>
+                  `<tr><td>${escapeHtml(r.contactEmail)}</td><td class="mono">${escapeHtml(
+                    r.intelCanonical || '—',
+                  )}</td><td class="mono">${escapeHtml(r.expectedFromContact || '—')}</td><td>${r.rowIndex}</td></tr>`,
+              )
+              .join('');
+            html += '</tbody></table></div>';
+          }
+        }
+        caMount.innerHTML = html;
+      }
+
+      const ubBody = document.getElementById('upstream-samples-body');
+      if (ubBody) {
+        const rows = ug.samples || [];
+        if (rows.length === 0) {
+          ubBody.innerHTML =
+            '<tr><td colspan="4" class="muted">No upstream-blocked contacts (or no samples in this payload).</td></tr>';
+        } else {
+          ubBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td>${escapeHtml(row.contactEmail)}</td><td class="mono">${escapeHtml(
+                  row.canonicalUrl || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.errorPreview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
     } catch (e) {
       showError(e instanceof Error ? e.message : String(e));
     } finally {

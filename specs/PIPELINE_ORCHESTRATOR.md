@@ -77,7 +77,7 @@ pending_review
 
 **`no_fit` contacts** are skipped permanently and never sent to. The operator can manually override `pipeline_status` in Sheets.
 
-**`research_failed` / `generation_failed` contacts** — contact-level errors accumulate in `Company Intelligence.error_log`; company-level research failures also write to **`Company Profiles.error_log`**. Operators reset `pipeline_status` after inspection.
+**`research_failed` / `generation_failed` contacts** — contact-level errors accumulate in `Company Intelligence.error_log`; company-level research failures also write to **`Company Profiles.error_log`**. Phase A and monthly refresh record a parseable line **`[RESEARCH_PHASE] code=<REASON> …`** (see `src/engine/research-phase-error.ts` and operator dashboard **Research & alignment — failures explained**). Operators reset `pipeline_status` after inspection.
 
 ---
 
@@ -120,6 +120,8 @@ Canonical company key: `resolveCanonicalCompanyUrl(contact.company_url)` (HTTPS,
 ## Phase B — Email Generation and Quality Review
 
 **Trigger:** `pipeline_status = 'alignment_complete'` or `'ready_for_generation'`.
+
+**Upstream gate (Track B):** Immediately after loading the stored Company Profiles row, `evaluateSequenceGenerationGate` runs (see `src/engine/sequence-generation-gate.ts`). If it fails, the orchestrator sets **`company_intelligence_blocked`** on the contact, appends **`[UPSTREAM_GATE] code=…`** to **Company Intelligence** `error_log`, and **returns** — **no** `generateEmailSequence`, **no** Review Queue rows, **no** merged QC for that contact. Thresholds and lineage stamps: env vars `GENERATION_*`, `PROMPT_VERSION`, `QC_RUBRIC_VERSION` (`docs/DATA_MODEL.md`, `docs/ENVIRONMENT_VARIABLES.md`). Operators clear the block with **`POST /api/admin/actions/contacts/:email/clear-intelligence-block`** after fixing data.
 
 **Idempotency guard:** if the Review Queue already contains an unassigned, unsuperseded 12-step sequence for this contact, Phase B is skipped and `pipeline_status` is set to `pending_review`.
 

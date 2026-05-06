@@ -40,6 +40,8 @@ function baseRaw(overrides: Record<string, unknown> = {}) {
     },
     admin: {},
     pipeline: {},
+    generationGate: {},
+    lineage: {},
     perplexity: {},
     llm: {},
     // Matches buildRawConfig shape — dashboard is required on configSchemaBase.

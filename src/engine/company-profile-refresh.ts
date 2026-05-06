@@ -22,6 +22,11 @@ import { companyNeedsRefreshSpend, type CompanyRefreshSpendSnapshot } from './co
 import { contactsAtCanonical, hasUnsyncedTailReviewRows, parseProfileVersionInt } from './sequence-funnel-state.js';
 import { maxSyncedStepFromCampaign } from './approval-watcher.js';
 import type { Campaign } from '../services/sheets-types.js';
+import {
+  classifyResearchFailure,
+  formatResearchPhaseErrorLog,
+  type ResearchFailurePhase,
+} from './research-phase-error.js';
 
 function lastTouchEpochMs(row: { lastRefreshedAt: string; researchedDate: string }): number {
   const ts = row.lastRefreshedAt?.trim() || row.researchedDate?.trim();
@@ -209,16 +214,19 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
         const log = { module: 'company-refresh', canonical };
         logger.info(log, 'Refreshing stale company profile');
 
+        let failurePhase: ResearchFailurePhase = 'research';
         try {
           const perplexity = createPerplexityProvider(config);
           const url = researchUrlFromCanonical(canonical) || current.companyUrl.trim();
           const profile = await researchCompany(perplexity, url);
           const now = new Date().toISOString();
+          failurePhase = 'alignment';
           const llm = createLLMProvider(config);
           const alignment = await evaluateAlignment(llm, profile);
           const nextVersion = String((parseInt(current.profileVersion, 10) || 1) + 1);
           const companyStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
 
+          failurePhase = 'sheet';
           await sheets.updateCompanyProfileRow(canonical, current._rowIndex, {
             companyName: profile.company_name,
             industry: profile.industry,
@@ -244,11 +252,15 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
             await armRegenerateFutureSequenceAfterRefresh(canonical, nextVersion);
           }
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          logger.error({ ...log, error: msg }, 'Company profile refresh failed — keeping prior alignment columns');
+          const { code, details } = classifyResearchFailure(err, failurePhase);
+          const formattedLine = formatResearchPhaseErrorLog(code, details);
+          logger.error(
+            { ...log, error: details, researchPhaseCode: code, failurePhase },
+            'Company profile refresh failed — keeping prior alignment columns',
+          );
           await sheets.updateCompanyProfileRow(canonical, current._rowIndex, {
             pipelineStatus: 'refresh_failed',
-            errorLog: appendLimitedError(current.errorLog, msg),
+            errorLog: appendLimitedError(current.errorLog, formattedLine),
           });
         }
       });

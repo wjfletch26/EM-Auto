@@ -62,6 +62,11 @@ describe('buildDashboardSummary', () => {
     assert.equal(summary.canonicalAudit.duplicateProfileKeys.length, 0);
     assert.equal(summary.canonicalAudit.intelDrift.length, 0);
     assert.equal(summary.canonicalAudit.intelDriftTruncated, false);
+    assert.equal(summary.upstreamGate.blockedContactCount, 0);
+    assert.equal(summary.companyHealth.rows.length, 0);
+    assert.equal(summary.companyHealth.truncated, false);
+    assert.equal(summary.researchPhase.contactsResearchFailed, 0);
+    assert.equal(summary.researchPhase.profilesResearchOrRefreshFailed, 0);
   });
 
   it('collects intelligence errors with previews', () => {

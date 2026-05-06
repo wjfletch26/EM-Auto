@@ -91,6 +91,21 @@ const pipelineSchema = z.object({
   companyStaleAfterDays: z.coerce.number().int().positive().default(28),
 });
 
+/** Block full / tail generation when company row is weak (Track B). All-off defaults = permissive. */
+const generationGateSchema = z.object({
+  minAlignmentConfidence: z.enum(['low', 'medium', 'high']).default('low'),
+  blockOnEmptyCaseStudies: envBoolean.default(false),
+  requireProductSummary: envBoolean.default(false),
+  requireSignalSummary: envBoolean.default(false),
+  requireParsableSignalsJson: envBoolean.default(false),
+});
+
+/** Stamp logs / executive brief for lineage (Track B). */
+const lineageSchema = z.object({
+  promptVersion: z.string().min(1).default('1'),
+  qcRubricVersion: z.string().min(1).default('1'),
+});
+
 const perplexitySchema = z.object({
   apiKey: z.string().optional().default(''),
   model: z.string().optional().default('sonar'),
@@ -151,6 +166,8 @@ const configSchemaBase = z.object({
   app: appSchemaBase,
   admin: adminSchema,
   pipeline: pipelineSchema,
+  generationGate: generationGateSchema,
+  lineage: lineageSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,
   dashboard: dashboardSchema,

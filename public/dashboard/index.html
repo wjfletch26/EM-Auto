@@ -79,6 +79,18 @@
             <span class="label">Review queue</span>
             <span id="metric-queue-total" class="value">—</span>
           </div>
+          <div class="metric">
+            <span class="label">Upstream blocked</span>
+            <span id="metric-upstream-blocked" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Research failed (contacts)</span>
+            <span id="metric-research-failed-contacts" class="value">—</span>
+          </div>
+          <div class="metric">
+            <span class="label">Profile research/refresh failed</span>
+            <span id="metric-research-failed-profiles" class="value">—</span>
+          </div>
         </section>
 
         <div class="grid">
@@ -97,6 +109,100 @@
           <article class="card">
             <h2>Review queue — status</h2>
             <div id="breakdown-queue"></div>
+          </article>
+          <article class="card">
+            <h2>Upstream gate — blocked contacts (by reason)</h2>
+            <p class="muted small">
+              Contacts in <code>company_intelligence_blocked</code>; primary reason parsed from
+              <code>[UPSTREAM_GATE] code=…</code> in Company Intelligence <code>error_log</code>.
+            </p>
+            <div id="breakdown-upstream-reasons"></div>
+          </article>
+          <article class="card">
+            <h2>Company health — profile + blocked rollups</h2>
+            <p class="muted small">
+              One row per resolved canonical (shared Company Profiles row when present). Blocked counts are derived from
+              contacts only — the company row is not marked blocked.
+            </p>
+            <p id="company-health-truncated" class="muted small" hidden></p>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Canonical</th>
+                    <th>Profile status</th>
+                    <th>Conf.</th>
+                    <th>Ver.</th>
+                    <th>Refreshed</th>
+                    <th>Dup key</th>
+                    <th>Blocked #</th>
+                    <th>Reasons</th>
+                  </tr>
+                </thead>
+                <tbody id="company-health-body"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Canonical URL integrity</h2>
+            <p class="muted small">Duplicate Company Profiles column A keys and Intel column B drift vs Contacts.</p>
+            <div id="canonical-audit-mount"></div>
+          </article>
+          <article class="card">
+            <h2>Research &amp; alignment — failures explained</h2>
+            <p class="muted small">
+              Phase A sets contacts to <code>research_failed</code> when Perplexity research, sheet writes, or Deaton alignment
+              fails. Monthly refresh sets <code>refresh_failed</code> on the company row. Reasons use
+              <code>[RESEARCH_PHASE] code=…</code> in <code>error_log</code>.
+            </p>
+            <h3 class="small-heading">Contacts — failed research / alignment (by reason)</h3>
+            <div id="breakdown-research-contact-reasons"></div>
+            <h3 class="small-heading">Sample contact rows</h3>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contact</th>
+                    <th>Canonical</th>
+                    <th>Reason</th>
+                    <th>Intel error_log (preview)</th>
+                  </tr>
+                </thead>
+                <tbody id="research-contact-samples-body"></tbody>
+              </table>
+            </div>
+            <h3 class="small-heading">Company profiles — research_failed / refresh_failed (by reason)</h3>
+            <div id="breakdown-research-profile-reasons"></div>
+            <h3 class="small-heading">Sample profile rows</h3>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Canonical</th>
+                    <th>Profile status</th>
+                    <th>Reason</th>
+                    <th>error_log (preview)</th>
+                  </tr>
+                </thead>
+                <tbody id="research-profile-samples-body"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Upstream gate — sample blocked rows</h2>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Contact</th>
+                    <th>Canonical</th>
+                    <th>Reason</th>
+                    <th>Intel error_log (preview)</th>
+                  </tr>
+                </thead>
+                <tbody id="upstream-samples-body"></tbody>
+              </table>
+            </div>
           </article>
           <article class="card">
             <h2>Intelligence errors (sample)</h2>

@@ -17,6 +17,12 @@ import {
   type DuplicateProfileKeyReport,
   type IntelDriftRow,
 } from '../utils/canonical-sheet-audit.js';
+import {
+  buildUpstreamHealthSnapshot,
+  type CompanyHealthRow,
+  type UpstreamBlockedSample,
+} from './dashboard-upstream-health.js';
+import { buildResearchPhaseDashboard, type ResearchPhaseDashboard } from './dashboard-research-phase.js';
 
 /** One bucket of string keys → counts (pipeline statuses, review statuses, etc.). */
 export type StatusBreakdown = Record<string, number>;
@@ -68,6 +74,25 @@ export type DashboardSummary = {
     intelDrift: IntelDriftRow[];
     intelDriftTruncated: boolean;
   };
+  /**
+   * Contacts stopped by the upstream sequence gate (`company_intelligence_blocked` on Contacts;
+   * reasons in Company Intelligence `error_log`).
+   */
+  upstreamGate: {
+    blockedContactCount: number;
+    blockedByReason: StatusBreakdown;
+    samples: UpstreamBlockedSample[];
+  };
+  /**
+   * Per resolved canonical: shared profile snapshot + how many contacts are upstream-blocked there.
+   * Derived only — never written back to Company Profiles.
+   */
+  companyHealth: {
+    rows: CompanyHealthRow[];
+    truncated: boolean;
+  };
+  /** Phase A / refresh: `research_failed` contacts and `research_failed` / `refresh_failed` profiles with parsed reasons. */
+  researchPhase: ResearchPhaseDashboard;
 };
 
 const ERROR_PREVIEW_LEN = 160;
@@ -135,6 +160,9 @@ export function buildDashboardSummary(
   const intelDriftAll = findIntelCanonicalDrift(contacts, intel);
   const intelDriftTruncated = intelDriftAll.length > MAX_INTEL_DRIFT_ROWS;
 
+  const upstream = buildUpstreamHealthSnapshot(contacts, intel, profiles);
+  const researchPhase = buildResearchPhaseDashboard(contacts, intel, profiles);
+
   return {
     generatedAt: new Date().toISOString(),
     contacts: {
@@ -163,5 +191,15 @@ export function buildDashboardSummary(
       intelDrift: intelDriftAll.slice(0, MAX_INTEL_DRIFT_ROWS),
       intelDriftTruncated,
     },
+    upstreamGate: {
+      blockedContactCount: upstream.blockedContactCount,
+      blockedByReason: upstream.blockedByReason,
+      samples: upstream.samples,
+    },
+    companyHealth: {
+      rows: upstream.companyRows,
+      truncated: upstream.companyRowsTruncated,
+    },
+    researchPhase,
   };
 }

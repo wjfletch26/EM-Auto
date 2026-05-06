@@ -58,3 +58,12 @@ export function findIntelCanonicalDrift(contacts: Contact[], intel: CompanyIntel
   }
   return drift;
 }
+
+/** Lowercased canonical URLs that appear on more than one Company Profiles row (column A). */
+export function duplicateCanonicalUrlsLowercased(profiles: StoredCompanyProfile[]): Set<string> {
+  const s = new Set<string>();
+  for (const d of findDuplicateCompanyProfileKeys(profiles)) {
+    s.add(d.canonicalUrl.toLowerCase());
+  }
+  return s;
+}

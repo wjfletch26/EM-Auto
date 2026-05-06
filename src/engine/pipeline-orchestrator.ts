@@ -23,6 +23,17 @@ import type { Contact, CompanyIntelligence, ReviewQueueEntry, StoredCompanyProfi
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
 import { researchUrlFromCanonical } from '../utils/normalize-company-url.js';
 import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
+import { duplicateCanonicalUrlsLowercased } from '../utils/canonical-sheet-audit.js';
+import {
+  evaluateSequenceGenerationGate,
+  formatUpstreamGateErrorLog,
+  formatGenerationLineageLine,
+} from './sequence-generation-gate.js';
+import {
+  classifyResearchFailure,
+  formatResearchPhaseErrorLog,
+  type ResearchFailurePhase,
+} from './research-phase-error.js';
 import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
 import { companyProfileFromStored, alignmentFromStored, storedProfileHasAlignment } from './company-profile-helpers.js';
 import { mergeContactBriefing } from './contact-briefing.js';
@@ -155,13 +166,13 @@ function appendErrorLog(prev: string, msg: string): string {
   return `${existing}[${new Date().toISOString()}] ${msg}`.slice(0, 5000);
 }
 
-async function markCompanyProfileResearchFailed(canonical: string, message: string): Promise<void> {
+async function markCompanyProfileResearchFailed(canonical: string, formattedLine: string): Promise<void> {
   const profiles = await sheets.getCompanyProfiles();
   const pr = profiles.find((p) => p.canonicalCompanyUrl.trim().toLowerCase() === canonical.toLowerCase());
   if (!pr) return;
   await sheets.updateCompanyProfileRow(canonical, pr._rowIndex, {
     pipelineStatus: 'research_failed',
-    errorLog: appendErrorLog(pr.errorLog, message),
+    errorLog: appendErrorLog(pr.errorLog, formattedLine),
   });
 }
 
@@ -173,9 +184,16 @@ async function processResearchAndAlignment(
   const log = { module: 'pipeline', email: contact.email, company: contact.company, canonical };
 
   if (!canonical) {
-    await safeUpdateStatus(contact, 'research_failed', 'Missing or invalid company_url');
+    const explain = formatResearchPhaseErrorLog(
+      'INVALID_CANONICAL_URL',
+      'Contact company_url is missing or did not resolve to a canonical key (normalization + allowlisted aliases). Fix the URL on the contact row or add an alias.',
+    );
+    await safeUpdateStatus(contact, 'research_failed', explain);
     return;
   }
+
+  /** NARROW_PHASE: which step was active so operators get a specific explanation, not only a raw stack message. */
+  let failurePhase: ResearchFailurePhase = 'sheet';
 
   try {
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'researching' });
@@ -207,6 +225,7 @@ async function processResearchAndAlignment(
         await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'aligning' });
         const llm = createLLMProvider(config);
         const profile = companyProfileFromStored(profileRow);
+        failurePhase = 'alignment';
         const alignment = await evaluateAlignment(llm, profile);
         const companyStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
         await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
@@ -226,9 +245,11 @@ async function processResearchAndAlignment(
       const perplexity = createPerplexityProvider(config);
       const researchUrl = researchUrlFromCanonical(canonical) || displayUrl;
       logger.info({ ...log }, 'Starting company research (shared profile)');
+      failurePhase = 'research';
       const profile = await researchCompany(perplexity, researchUrl);
       const now = new Date().toISOString();
 
+      failurePhase = 'sheet';
       if (profileRow) {
         await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
           companyUrl: displayUrl,
@@ -273,9 +294,11 @@ async function processResearchAndAlignment(
 
       await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'aligning' });
       const llm = createLLMProvider(config);
+      failurePhase = 'alignment';
       const alignment = await evaluateAlignment(llm, profile);
       const companyStatus = alignment.no_fit_flag ? 'no_fit' : 'alignment_complete';
 
+      failurePhase = 'sheet';
       await sheets.updateCompanyProfileRow(canonical, profileRow._rowIndex, {
         deatonCapabilitiesMatched: alignment.relevant_capabilities.map((c) => c.capability_name).join(', '),
         caseStudiesSelected: alignment.selected_case_studies.map((c) => c.case_study_id).join(', '),
@@ -291,14 +314,15 @@ async function processResearchAndAlignment(
       logger.info({ ...log, status: companyStatus, confidence: alignment.confidence }, 'Research + alignment complete');
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ ...log, error: msg }, 'Research/alignment failed');
+    const { code, details } = classifyResearchFailure(err, failurePhase);
+    const formattedLine = formatResearchPhaseErrorLog(code, details);
+    logger.error({ ...log, error: details, researchPhaseCode: code, failurePhase }, 'Research/alignment failed');
     try {
-      await markCompanyProfileResearchFailed(canonical, msg);
+      await markCompanyProfileResearchFailed(canonical, formattedLine);
     } catch {
       /* best-effort */
     }
-    await safeUpdateStatus(contact, 'research_failed', msg);
+    await safeUpdateStatus(contact, 'research_failed', formattedLine);
   }
 }
 
@@ -331,6 +355,30 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
       throw new Error(`Company profile not found for canonical URL: ${canonKey}`);
     }
 
+    const dupLower = duplicateCanonicalUrlsLowercased(profileRows);
+    const gateResult = evaluateSequenceGenerationGate(
+      contact,
+      stored,
+      canonKey,
+      dupLower,
+      config.generationGate,
+    );
+    if (!gateResult.ok) {
+      const line = formatUpstreamGateErrorLog(gateResult.reasonCode, gateResult.details);
+      const prev = intel.errorLog?.trim() ? `${intel.errorLog.trim()}\n` : '';
+      await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
+        errorLog: `${prev}${line}`.slice(0, 5000),
+      });
+      await sheets.updateContact(contact.email, contact._rowIndex, {
+        pipelineStatus: 'company_intelligence_blocked',
+      });
+      logger.info(
+        { ...log, event: 'upstream_gate_block', reasonCode: gateResult.reasonCode },
+        'Upstream gate blocked full sequence generation',
+      );
+      return;
+    }
+
     await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generating' });
 
     const profile: CompanyProfile = companyProfileFromStored(stored);
@@ -342,7 +390,17 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
       .map((s) => s.trim())
       .filter(Boolean);
 
-    logger.info(log, 'Generating email sequence');
+    logger.info(
+      {
+        ...log,
+        event: 'sequence_generation_start',
+        profileVersion: stored.profileVersion.trim() || '1',
+        promptVersion: config.lineage.promptVersion,
+        qcRubricVersion: config.lineage.qcRubricVersion,
+        canonKey,
+      },
+      'Starting email sequence generation',
+    );
     const llm = createLLMProvider(config);
     const emailSequence = await generateEmailSequence(
       llm,
@@ -452,12 +510,19 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
 
     const now = new Date().toISOString();
     const failedAfterAuto = new Set(qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step));
+    const lineageStamp = formatGenerationLineageLine({
+      profileVersion: stored.profileVersion.trim() || '1',
+      promptVersion: config.lineage.promptVersion,
+      qcRubricVersion: config.lineage.qcRubricVersion,
+      alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
+    });
     const reviewEntries = sequence.emails.map((email) => {
       const emailReview = qcResult.email_reviews.find((r) => r.step === email.step);
-      const notes =
+      const qcNotes =
         emailReview && !emailReview.pass
           ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
           : '';
+      const reviewerNotes = [lineageStamp, qcNotes].filter(Boolean).join('\n');
       const subject = replaceEmDashesWithPlainHyphen(
         normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company),
       );
@@ -472,7 +537,7 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
           replaceEmDashesWithPlainHyphen(normalizeGreetingBody(email.body, contact.firstName)),
         ),
         status: 'pending_review',
-        reviewerNotes: notes,
+        reviewerNotes,
         generatedDate: now,
         approvedDate: '',
         campaignId: '',
@@ -504,7 +569,7 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
         ? `QC: PASSED (${qcResult.overall_score})`
         : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,
     ];
-    const executiveBrief = briefParts.join('\n\n');
+    const executiveBrief = [lineageStamp, briefParts.join('\n\n')].join('\n\n');
 
     await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
       executiveBrief,

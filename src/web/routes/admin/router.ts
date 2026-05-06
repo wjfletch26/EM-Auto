@@ -16,6 +16,9 @@ import { executeSendCycle } from '../../../engine/send-engine.js';
 import { runPipelineCycle } from '../../../engine/pipeline-orchestrator.js';
 import { runApprovalWatcherCycle } from '../../../engine/approval-watcher.js';
 import { runCompanyProfileRefreshCycle } from '../../../engine/company-profile-refresh.js';
+import {
+  stripUpstreamGateLinesFromErrorLog,
+} from '../../../engine/sequence-generation-gate.js';
 
 const ENGINE_FIELDS = new Set<string>([
   'status',
@@ -398,6 +401,28 @@ export function createAdminRouter(): Router {
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'approval_watcher' });
       await runApprovalWatcherCycle();
+      res.json({ ok: true });
+    }),
+  );
+
+  r.post(
+    '/actions/contacts/:email/clear-intelligence-block',
+    asyncHandler(async (req, res, _next) => {
+      const email = parseEmailParam(req);
+      const contacts = await sheets.getContacts();
+      const contact = contacts.find((c) => c.email === email);
+      if (!contact) {
+        res.status(404).json({ error: 'Contact not found' });
+        return;
+      }
+      const intelRows = await sheets.getCompanyIntelligence();
+      const intel = intelRows.find((r) => r.contactEmail === email);
+      adminLog(req, { action: 'clear_intelligence_block', email });
+      await sheets.updateContact(email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
+      if (intel) {
+        const cleaned = stripUpstreamGateLinesFromErrorLog(intel.errorLog || '');
+        await sheets.updateCompanyIntelligence(email, intel._rowIndex, { errorLog: cleaned });
+      }
       res.json({ ok: true });
     }),
   );
