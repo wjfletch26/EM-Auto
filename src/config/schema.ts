@@ -84,6 +84,26 @@ const loggingSchema = z.object({
 const pipelineSchema = z.object({
   enabled: envBoolean.default(false),
   cron: z.string().default('*/5 * * * *'),
+  /** Separate cron for re-researching existing Company Profiles (default: monthly, 03:00 on day 1). */
+  companyRefreshCron: z.string().default('0 3 1 * *'),
+  companyRefreshEnabled: envBoolean.default(true),
+  /** Minimum age (`last_refreshed_at`) before a profile is eligible for refresh. */
+  companyStaleAfterDays: z.coerce.number().int().positive().default(28),
+});
+
+/** Block full / tail generation when company row is weak (Track B). All-off defaults = permissive. */
+const generationGateSchema = z.object({
+  minAlignmentConfidence: z.enum(['low', 'medium', 'high']).default('low'),
+  blockOnEmptyCaseStudies: envBoolean.default(false),
+  requireProductSummary: envBoolean.default(false),
+  requireSignalSummary: envBoolean.default(false),
+  requireParsableSignalsJson: envBoolean.default(false),
+});
+
+/** Stamp logs / executive brief for lineage (Track B). */
+const lineageSchema = z.object({
+  promptVersion: z.string().min(1).default('1'),
+  qcRubricVersion: z.string().min(1).default('1'),
 });
 
 const perplexitySchema = z.object({
@@ -151,6 +171,8 @@ const configSchemaBase = z.object({
   app: appSchemaBase,
   admin: adminSchema,
   pipeline: pipelineSchema,
+  generationGate: generationGateSchema,
+  lineage: lineageSchema,
   perplexity: perplexitySchema,
   llm: llmSchema,
   dashboard: dashboardSchema,

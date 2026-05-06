@@ -27,6 +27,7 @@ import type { Contact, Campaign, CampaignStep, ReviewQueueEntry } from '../servi
 import { embedOutboundSignatureHtml } from '../content/email-signature.js';
 import { stripTrailingInformalSignoff } from '../content/body-signoff-strip.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
+import { normalizePlainBodyHyphens, normalizeHtmlBodyHyphens } from '../content/body-hyphen-normalize.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -100,8 +101,8 @@ export function validateAndNormalizeAIDraft(
     (queueBody || '').trim(),
     contactFirstName,
   );
-  const bodyPlain = replaceEmDashesWithPlainHyphen(
-    stripTrailingInformalSignoff(normalizedBody),
+  const bodyPlain = normalizePlainBodyHyphens(
+    replaceEmDashesWithPlainHyphen(stripTrailingInformalSignoff(normalizedBody)),
   );
   if (!bodyPlain.trim()) {
     return { ok: false, subject, bodyPlain: '', reason: 'blank_body' };
@@ -324,6 +325,10 @@ export async function executeSendCycle(): Promise<SendRunResult | null> {
             continue;
           }
         }
+
+        // Strip long dashes and punctuation hyphens in body HTML (compounds / URLs stay intact).
+        subject = replaceEmDashesWithPlainHyphen(subject);
+        html = normalizeHtmlBodyHyphens(replaceEmDashesWithPlainHyphen(html));
 
         // David Knieriem card + tagline on every outbound message (before CAN-SPAM hr block).
         html = embedOutboundSignatureHtml(html);

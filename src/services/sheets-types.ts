@@ -31,6 +31,11 @@ export interface Contact {
   companyUrl: string;
   /** Pipeline status — tracks the contact through the intelligence pipeline. */
   pipelineStatus: string;
+  /**
+   * Last Company Profiles `profile_version` the contact’s generated Review Queue content
+   * was produced against (column Y). Empty = never set / pre-migration.
+   */
+  lastProfileVersionUsedForGeneration: string;
   /** 1-indexed row number in the sheet — used for targeted cell updates. */
   _rowIndex: number;
 }
@@ -60,6 +65,7 @@ export interface ContactUpdate {
   notes: string;
   companyUrl: string;
   pipelineStatus: string;
+  lastProfileVersionUsedForGeneration: string;
 }
 
 /** A single step within a campaign sequence. */
@@ -79,6 +85,8 @@ export interface Campaign {
   active: boolean;
   /** 'template' for Handlebars campaigns, 'ai_generated' for pipeline-created ones. */
   campaignType: 'template' | 'ai_generated';
+  /** Sheet row number (first data row = 2) — set by getCampaigns for mutations. */
+  _rowIndex?: number;
 }
 
 /** A row from the Send Log tab (append-only). */
@@ -131,6 +139,7 @@ export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
   notes: 'V',
   companyUrl: 'W',
   pipelineStatus: 'X',
+  lastProfileVersionUsedForGeneration: 'Y',
 };
 
 /**
@@ -178,11 +187,12 @@ export interface ContactAppendPayload {
   pipelineStatus?: string;
 }
 
-// ─── Company Intelligence Tab Types ──────────────────────────────────────────
+// ─── Company Profiles Tab (one row per canonical company URL) ───────────────
 
-/** A row from the Company Intelligence tab. */
-export interface CompanyIntelligence {
-  contactEmail: string;
+/** Shared research + alignment for all contacts at a company — see docs/DATA_MODEL.md. */
+export interface StoredCompanyProfile {
+  canonicalCompanyUrl: string;
+  /** Display URL as entered by operators (research uses canonical). */
   companyUrl: string;
   companyName: string;
   industry: string;
@@ -194,39 +204,24 @@ export interface CompanyIntelligence {
   caseStudiesSelected: string;
   alignmentRationale: string;
   confidenceScore: string;
-  davidProjectNotes: string;
-  executiveBrief: string;
+  /** Company-level pipeline: researched, aligning, alignment_complete, no_fit, research_failed, refresh_failed */
   pipelineStatus: string;
   researchedDate: string;
-  generatedDate: string;
+  /** ISO timestamp of last successful refresh (initial research counts as first refresh). */
+  lastRefreshedAt: string;
+  profileVersion: string;
   errorLog: string;
   /** 1-indexed row number in the sheet. */
   _rowIndex: number;
 }
 
-/** Fields the pipeline (and admin UI) can update on a Company Intelligence row. */
-export interface CompanyIntelUpdate {
-  companyName: string;
-  industry: string;
-  productSummary: string;
-  companySize: string;
-  signals: string;
-  signalSummary: string;
-  deatonCapabilitiesMatched: string;
-  caseStudiesSelected: string;
-  alignmentRationale: string;
-  confidenceScore: string;
-  /** Column M — operator / David notes passed into email generation. */
-  davidProjectNotes: string;
-  executiveBrief: string;
-  pipelineStatus: string;
-  researchedDate: string;
-  generatedDate: string;
-  errorLog: string;
-}
-
-/** Maps CompanyIntelUpdate fields to column letters in Company Intelligence tab. */
-export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
+/** Maps StoredCompanyProfile field names → column letters (row 2+). */
+export const COMPANY_PROFILE_FIELD_TO_COLUMN: Record<
+  keyof Omit<StoredCompanyProfile, '_rowIndex'>,
+  string
+> = {
+  canonicalCompanyUrl: 'A',
+  companyUrl: 'B',
   companyName: 'C',
   industry: 'D',
   productSummary: 'E',
@@ -237,12 +232,51 @@ export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
   caseStudiesSelected: 'J',
   alignmentRationale: 'K',
   confidenceScore: 'L',
-  davidProjectNotes: 'M',
-  executiveBrief: 'N',
-  pipelineStatus: 'O',
-  researchedDate: 'P',
-  generatedDate: 'Q',
-  errorLog: 'R',
+  pipelineStatus: 'M',
+  researchedDate: 'N',
+  lastRefreshedAt: 'O',
+  profileVersion: 'P',
+  errorLog: 'Q',
+};
+
+// ─── Company Intelligence Tab (per contact — briefing + linkage) ─────────────
+
+/** A row from the Company Intelligence tab — joins contact_email ↔ canonical_company_url. */
+export interface CompanyIntelligence {
+  contactEmail: string;
+  canonicalCompanyUrl: string;
+  /** Copy of Contacts.company_url for display; may differ slightly from canonical. */
+  companyUrl: string;
+  davidProjectNotes: string;
+  executiveBrief: string;
+  /** Mirrors contact pipeline milestones for operator visibility (generation phase). */
+  pipelineStatus: string;
+  generatedDate: string;
+  errorLog: string;
+  /** 1-indexed row number in the sheet. */
+  _rowIndex: number;
+}
+
+/** Fields the pipeline (and admin UI) can update on a Company Intelligence row. */
+export interface CompanyIntelUpdate {
+  canonicalCompanyUrl: string;
+  companyUrl: string;
+  davidProjectNotes: string;
+  executiveBrief: string;
+  pipelineStatus: string;
+  generatedDate: string;
+  errorLog: string;
+}
+
+/** Maps CompanyIntelUpdate fields to column letters in Company Intelligence tab (A–H). */
+export const INTEL_FIELD_TO_COLUMN: Record<keyof CompanyIntelUpdate, string> = {
+  canonicalCompanyUrl: 'B',
+  companyUrl: 'C',
+  davidProjectNotes: 'D',
+  executiveBrief: 'E',
+  pipelineStatus: 'F',
+  generatedDate: 'G',
+  errorLog: 'H',
 };
 
 // ─── Review Queue Tab Types ──────────────────────────────────────────────────

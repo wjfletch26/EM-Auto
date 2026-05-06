@@ -12,6 +12,7 @@ You MUST return valid JSON matching the schema described below. Do not include a
 7. **Subject Lines**: Are they under 60 characters and free of spam triggers?
 8. **Sign-off hygiene**: The send system appends the real signature. Flag any email that still ends with a formal closing (Best, Sincerely, etc.), placeholder text like [Your Name], or a standalone "Deaton Engineering" signature line — those should be removed so only one signature appears when sent.
 9. **Typography**: Flag any em dash character (—) in subject or body. Generated copy must use commas, semicolons, or spaced hyphens instead.
+10. **In-person visit claims**: Use **Geography / in-person visits** below. If the block says the prospect is **not** Texas Triangle–proximal, flag any email (especially step 9) that invites a visit to **their** site or implies the sender is nearby enough to "drop by".
 
 JSON Schema:
 {
@@ -53,6 +54,9 @@ Review the following 12-email outreach sequence for quality.
 
 ## Planned 12-Step Structure (check each email fits its step):
 {{email_structure}}
+
+## Geography / in-person visits:
+{{geography_visit_policy}}
 
 Instructions:
 1. Evaluate each email against all criteria listed above.
