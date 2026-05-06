@@ -18,7 +18,8 @@ export function normalizeCanonicalCompanyUrl(raw: string): string {
   try {
     u = new URL(href);
   } catch {
-    return trimmed.toLowerCase();
+    // Do not return a non-URL string: it would never join to `https://…` profile rows (silent miss).
+    return '';
   }
 
   let host = u.hostname.toLowerCase();

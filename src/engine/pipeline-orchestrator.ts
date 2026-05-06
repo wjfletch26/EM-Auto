@@ -21,7 +21,8 @@ import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regen
 import { runFullMergedQC } from './email-qc-runner.js';
 import type { Contact, CompanyIntelligence, ReviewQueueEntry, StoredCompanyProfile } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
-import { normalizeCanonicalCompanyUrl, researchUrlFromCanonical } from '../utils/normalize-company-url.js';
+import { researchUrlFromCanonical } from '../utils/normalize-company-url.js';
+import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
 import { companyProfileFromStored, alignmentFromStored, storedProfileHasAlignment } from './company-profile-helpers.js';
 import { mergeContactBriefing } from './contact-briefing.js';
@@ -168,7 +169,7 @@ async function processResearchAndAlignment(
   contact: Contact,
   intelByEmail: Map<string, CompanyIntelligence>,
 ): Promise<void> {
-  const canonical = normalizeCanonicalCompanyUrl(contact.companyUrl);
+  const canonical = resolveCanonicalCompanyUrl(contact.companyUrl);
   const log = { module: 'pipeline', email: contact.email, company: contact.company, canonical };
 
   if (!canonical) {
@@ -318,7 +319,8 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
     }
 
     const canonKey =
-      intel.canonicalCompanyUrl.trim() || normalizeCanonicalCompanyUrl(contact.companyUrl);
+      resolveCanonicalCompanyUrl(contact.companyUrl) ||
+      resolveCanonicalCompanyUrl(intel.canonicalCompanyUrl || '');
     if (!canonKey) {
       throw new Error('Cannot resolve canonical company URL for generation');
     }

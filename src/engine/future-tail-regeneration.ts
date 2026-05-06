@@ -13,7 +13,7 @@ import { generateEmailSequenceTail } from '../skills/email-generator.js';
 import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
 import type { Contact, CompanyIntelligence, ReviewQueueEntry, Campaign } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
-import { normalizeCanonicalCompanyUrl } from '../utils/normalize-company-url.js';
+import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { companyProfileFromStored, alignmentFromStored } from './company-profile-helpers.js';
 import { mergeContactBriefing } from './contact-briefing.js';
 import { runFullMergedQC } from './email-qc-runner.js';
@@ -132,7 +132,8 @@ export async function processFutureTailRegeneration(
     const fromStep = maxSynced + 1;
 
     const canonKey =
-      intel?.canonicalCompanyUrl?.trim() || normalizeCanonicalCompanyUrl(contact.companyUrl);
+      resolveCanonicalCompanyUrl(contact.companyUrl) ||
+      resolveCanonicalCompanyUrl(intel?.canonicalCompanyUrl || '');
     if (!canonKey) {
       throw new Error('Cannot resolve canonical company URL for future regen');
     }

@@ -10,6 +10,7 @@
 import { google, type sheets_v4 } from 'googleapis';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
+import { findDuplicateCompanyProfileKeys } from '../utils/canonical-sheet-audit.js';
 import type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
@@ -583,7 +584,7 @@ export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   );
 
   const rows = res.data.values || [];
-  return rows.map((row, i) => ({
+  const result = rows.map((row, i) => ({
     canonicalCompanyUrl: row[0]?.trim() || '',
     companyUrl: row[1] || '',
     companyName: row[2] || '',
@@ -603,6 +604,21 @@ export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
     errorLog: row[16] || '',
     _rowIndex: i + 2,
   }));
+
+  const duplicateKeys = findDuplicateCompanyProfileKeys(result);
+  for (const d of duplicateKeys) {
+    logger.warn(
+      {
+        module: 'sheets',
+        event: 'duplicate_company_profile_key',
+        canonicalUrl: d.canonicalUrl,
+        rowIndices: d.rowIndices,
+      },
+      'Duplicate Company Profiles row(s) for same canonical_company_url',
+    );
+  }
+
+  return result;
 }
 
 /** Appends a new Company Profiles row after successful research bootstrap. */

@@ -16,7 +16,7 @@ import {
 import { runFullMergedQC } from '../engine/email-qc-runner.js';
 import { companyProfileFromStored, alignmentFromStored } from '../engine/company-profile-helpers.js';
 import { mergeContactBriefing } from '../engine/contact-briefing.js';
-import { normalizeCanonicalCompanyUrl } from '../utils/normalize-company-url.js';
+import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 
 export type RegenerateReviewRowResult = {
   cohesionPass: boolean;
@@ -100,7 +100,8 @@ export async function regenerateReviewQueueRow(
   if (!contact) throw new Error('Contacts row not found for this email');
 
   const canonKey =
-    intel.canonicalCompanyUrl.trim() || normalizeCanonicalCompanyUrl(contact.companyUrl);
+    resolveCanonicalCompanyUrl(contact.companyUrl) ||
+    resolveCanonicalCompanyUrl(intel.canonicalCompanyUrl || '');
   if (!canonKey) throw new Error('Cannot resolve canonical company URL for regeneration');
 
   const profiles = await sheets.getCompanyProfiles();

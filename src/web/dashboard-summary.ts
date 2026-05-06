@@ -10,7 +10,13 @@ import type {
   Contact,
   ReviewQueueEntry,
   StoredCompanyProfile,
-} from '../services/sheets.js';
+} from '../services/sheets-types.js';
+import {
+  findDuplicateCompanyProfileKeys,
+  findIntelCanonicalDrift,
+  type DuplicateProfileKeyReport,
+  type IntelDriftRow,
+} from '../utils/canonical-sheet-audit.js';
 
 /** One bucket of string keys → counts (pipeline statuses, review statuses, etc.). */
 export type StatusBreakdown = Record<string, number>;
@@ -56,10 +62,17 @@ export type DashboardSummary = {
     total: number;
     status: StatusBreakdown;
   };
+  /** Company Profiles duplicate keys + Intel column B drift vs resolve(contact company_url). */
+  canonicalAudit: {
+    duplicateProfileKeys: DuplicateProfileKeyReport[];
+    intelDrift: IntelDriftRow[];
+    intelDriftTruncated: boolean;
+  };
 };
 
 const ERROR_PREVIEW_LEN = 160;
 const MAX_ERROR_ROWS = 12;
+const MAX_INTEL_DRIFT_ROWS = 24;
 
 /**
  * Increments a count in an object — used for every status histogram in this module.
@@ -118,6 +131,10 @@ export function buildDashboardSummary(
     bump(reviewStatus, entry.status || '(empty)');
   }
 
+  const duplicateProfileKeys = findDuplicateCompanyProfileKeys(profiles);
+  const intelDriftAll = findIntelCanonicalDrift(contacts, intel);
+  const intelDriftTruncated = intelDriftAll.length > MAX_INTEL_DRIFT_ROWS;
+
   return {
     generatedAt: new Date().toISOString(),
     contacts: {
@@ -140,6 +157,11 @@ export function buildDashboardSummary(
     reviewQueue: {
       total: queue.length,
       status: reviewStatus,
+    },
+    canonicalAudit: {
+      duplicateProfileKeys,
+      intelDrift: intelDriftAll.slice(0, MAX_INTEL_DRIFT_ROWS),
+      intelDriftTruncated,
     },
   };
 }

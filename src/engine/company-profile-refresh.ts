@@ -13,7 +13,8 @@ import * as sheets from '../services/sheets.js';
 import { createPerplexityProvider, createLLMProvider } from '../services/llm-provider.js';
 import { researchCompany } from '../skills/company-research.js';
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
-import { normalizeCanonicalCompanyUrl, researchUrlFromCanonical } from '../utils/normalize-company-url.js';
+import { researchUrlFromCanonical } from '../utils/normalize-company-url.js';
+import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
 import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job-mutex.js';
 import { storedProfileHasAlignment } from './company-profile-helpers.js';
@@ -179,7 +180,7 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
       const t = lastTouchEpochMs(row);
       if (!Number.isNaN(t) && t >= cutoff) continue;
 
-      const canonical = normalizeCanonicalCompanyUrl(row.canonicalCompanyUrl);
+      const canonical = resolveCanonicalCompanyUrl(row.canonicalCompanyUrl);
       if (!canonical) continue;
 
       if (!companyNeedsRefreshSpend(canonical, spendSnapshot)) {

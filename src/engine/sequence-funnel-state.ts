@@ -6,7 +6,7 @@
  */
 
 import type { Campaign, Contact, ReviewQueueEntry } from '../services/sheets-types.js';
-import { normalizeCanonicalCompanyUrl } from '../utils/normalize-company-url.js';
+import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { maxSyncedStepFromCampaign } from './approval-watcher.js';
 
 /** Integer profile version; empty or non-numeric → 0. */
@@ -31,7 +31,7 @@ export function sequenceComplete(contact: Contact, campaign: Campaign | undefine
 
 /** Normalized canonical key for a contact row (lowercase trimmed URL). */
 export function contactCanonicalKey(contact: Contact): string {
-  return normalizeCanonicalCompanyUrl(contact.companyUrl || '').trim().toLowerCase();
+  return resolveCanonicalCompanyUrl(contact.companyUrl || '').trim().toLowerCase();
 }
 
 /** Contacts whose canonical company URL matches `canonical` (already normalized, lowercase). */

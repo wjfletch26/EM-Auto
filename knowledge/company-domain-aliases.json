@@ -1,0 +1,4 @@
+{
+  "$schemaNote": "Explicit canonical URL aliases only — from_key and to_key are normalized on load. Add pairs when two domains must share one Company Profiles row (never infer automatically).",
+  "pairs": []
+}

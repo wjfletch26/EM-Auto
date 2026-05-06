@@ -9,7 +9,7 @@ This note is for spreadsheets created **before** the company-scoped profile chan
 | _(new)_ **Company Profiles** | — | One row per canonical `company_url` with Perplexity + alignment payload. |
 | **Company Intelligence** | One wide row per contact (duplicated research columns). | Slim per-contact row: `contact_email`, `canonical_company_url`, `company_url`, `david_project_notes`, `executive_brief`, `pipeline_status`, `generated_date`, `error_log`. |
 
-Canonical URLs are computed the same way as production: `normalizeCanonicalCompanyUrl()` in code (HTTPS, strip `www.`, normalize path).
+Canonical URLs use **`resolveCanonicalCompanyUrl()`** in code (HTTPS, strip `www.`, normalized path, then explicit allowlisted pairs in `knowledge/company-domain-aliases.json` if configured).
 
 ## Recommended migration steps
 
@@ -25,5 +25,6 @@ Canonical URLs are computed the same way as production: `normalizeCanonicalCompa
    - Set `company_url` from Contacts or the old display URL.
 5. **Run** `npx tsx scripts/format-spreadsheet.ts --all-known-tabs` so column widths/filters match the new layout.
 6. Smoke-test: set one contact to `pipeline_status=new` on a **new** company URL and confirm a single Company Profiles row is appended; add a second contact at the same URL and confirm Phase A skips Perplexity.
+7. **Canonical audit:** run `npm run sheets:audit-canonical` (or use the dashboard summary `canonicalAudit` field) after edits; resolve `duplicateProfileKeys` and `intelDrift` before relying on joins.
 
 There is no automatic migration script in-repo — sheet shapes vary; operators should validate a copy first.

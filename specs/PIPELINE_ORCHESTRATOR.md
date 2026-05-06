@@ -85,7 +85,7 @@ pending_review
 
 **Trigger:** `pipeline_status = 'new'` AND `company_url` is not blank.
 
-Canonical company key: `normalizeCanonicalCompanyUrl(contact.company_url)` (HTTPS, no `www.` prefix, normalized path).
+Canonical company key: `resolveCanonicalCompanyUrl(contact.company_url)` (HTTPS, no `www.` prefix, normalized path, optional alias map).
 
 **Concurrency:** `withCanonicalCompanyLock(canonicalUrl)` serializes research for the same firm. The pipeline and **monthly refresh** share `intelligence-job-mutex.ts` so two jobs never mutate profiles at once.
 

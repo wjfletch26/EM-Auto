@@ -121,7 +121,7 @@ Append-only log of every classified reply. Written by the reply processor (autom
 
 | Column | Header | Notes |
 |---|---|---|
-| A | `canonical_company_url` | Stable key from URL normalization (see code: `normalizeCanonicalCompanyUrl`) |
+| A | `canonical_company_url` | Stable key from [`resolveCanonicalCompanyUrl`](../src/utils/resolve-canonical-company-url.ts) (normalization + optional allowlisted aliases in `knowledge/company-domain-aliases.json`) |
 | B | `company_url` | Operator-facing URL (often same as canonical) |
 | C | `company_name` | From research |
 | D | `industry` | From research |
@@ -138,6 +138,8 @@ Append-only log of every classified reply. Written by the reply processor (autom
 | O | `last_refreshed_at` | ISO timestamp of latest successful refresh |
 | P | `profile_version` | Integer string; bump on each successful refresh |
 | Q | `error_log` | Company-level errors |
+
+**Operator runbook — duplicate column A or wrong joins:** There must be **exactly one** `Company Profiles` row per `canonical_company_url`. If two rows share the same key, merge data manually (backup the sheet first), delete the duplicate row, set **Company Intelligence** column B and **Contacts** `company_url` so they match the surviving canonical, then run `npx tsx scripts/audit-canonical-profiles.ts` (or open the dashboard **canonical audit** JSON) to confirm `duplicateProfileKeys` and `intelDrift` are empty.
 
 ### Tab: Company Intelligence
 

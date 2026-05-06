@@ -22,4 +22,9 @@ describe('normalizeCanonicalCompanyUrl', () => {
   it('returns empty for blank input', () => {
     assert.equal(normalizeCanonicalCompanyUrl('  '), '');
   });
+
+  it('returns empty for unparseable URL (invalid host)', () => {
+    assert.equal(normalizeCanonicalCompanyUrl('https://'), '');
+    assert.equal(normalizeCanonicalCompanyUrl('not a url at all !!!'), '');
+  });
 });
