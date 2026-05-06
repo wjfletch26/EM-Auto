@@ -12,9 +12,32 @@ import { createDashboardRouter } from './routes/dashboard-router.js';
 import { unsubscribeHandler } from './routes/unsubscribe.js';
 import { requireAdminApiKey } from './middleware/admin-auth.js';
 import { createAdminRouter } from './routes/admin/router.js';
+import { buildHealthPayload, healthHttpStatus } from '../ops/health-checks.js';
 
-const healthHandler: RequestHandler = (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+const healthHandler: RequestHandler = async (_req, res) => {
+  try {
+    const payload = await buildHealthPayload();
+    res.status(healthHttpStatus(payload)).json(payload);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ module: 'web', error: message }, '/health failed');
+    res.status(503).json({
+      status: 'failed' as const,
+      error: message,
+      appEnv: config.app.appEnv,
+      safeMode: config.app.safeMode,
+      dryRun: config.app.dryRun,
+      emailMode: config.app.emailMode,
+      deploy: {
+        sha: '',
+        branch: '',
+        time: '',
+        deployer: '',
+        appEnv: config.app.appEnv,
+      },
+      checks: { webServer: 'fail' as const },
+    });
+  }
 };
 
 /** Absolute path to Vite build output (`npm run build:admin`). */

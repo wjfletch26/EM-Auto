@@ -1,0 +1,2 @@
+# VPS deploy and Linux tooling: CRLF breaks shebangs and flock-based scripts.
+scripts/*.sh text eol=lf

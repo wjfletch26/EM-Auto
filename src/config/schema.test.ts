@@ -261,4 +261,45 @@ describe('configSchema safety rules', () => {
       assert.equal(r.data.app.schedulerEnabled, true);
     }
   });
+
+  it('SAFE_MODE forces scheduler off for production', () => {
+    const r = safeParseConfig(
+      baseRaw({
+        app: {
+          appEnv: 'production',
+          safeMode: 'true',
+        },
+      }),
+    );
+    assert.equal(r.success, true);
+    if (r.success) {
+      assert.equal(r.data.app.safeMode, true);
+      assert.equal(r.data.app.schedulerEnabled, false);
+    }
+  });
+
+  it('SAFE_MODE overrides explicit SCHEDULER_ENABLED=true', () => {
+    const r = safeParseConfig(
+      baseRaw({
+        google: {
+          serviceAccountPath: './credentials/service-account.json',
+          spreadsheetId: 'localOnlySheet999',
+          productionSpreadsheetId: 'prodSheetId12345',
+        },
+        app: {
+          appEnv: 'local',
+          nodeEnv: 'development',
+          physicalAddress: '123 Test St',
+          dryRun: 'true',
+          testRecipient: '',
+          schedulerEnabled: 'true',
+          safeMode: 'true',
+        },
+      }),
+    );
+    assert.equal(r.success, true);
+    if (r.success) {
+      assert.equal(r.data.app.schedulerEnabled, false);
+    }
+  });
 });

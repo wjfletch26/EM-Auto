@@ -53,6 +53,24 @@ async function getClient(): Promise<sheets_v4.Sheets> {
 
 const SPREADSHEET_ID = config.google.spreadsheetId;
 
+/**
+ * Minimal Google Sheets API call for layered /health (spreadsheetId field only).
+ */
+export async function verifySpreadsheetReachable(): Promise<boolean> {
+  try {
+    const client = await getClient();
+    await withRetry(() =>
+      client.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+        fields: 'spreadsheetId',
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Retry helper ────────────────────────────────────────────────────────────
 
 /** Sleep for the given number of milliseconds. */

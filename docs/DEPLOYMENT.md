@@ -247,6 +247,19 @@ Start with: `pm2 start ecosystem.config.js`
 
 ## Update / Redeploy Procedure
 
+**Recommended (idempotent):** from the app directory on the VPS, with `GIT_SHA`, `GIT_REF`, and `DEPLOYER` set if you want `deploy-manifest.json` populated:
+
+```bash
+export GIT_SHA="$(git rev-parse HEAD)"
+export GIT_REF="$(git rev-parse --abbrev-ref HEAD)"
+export DEPLOYER="$(whoami)"
+bash scripts/vps-deploy.sh
+```
+
+That script runs **preflight** checks, acquires **`.deploy.lock`**, pulls **`DEPLOY_GIT_REF`** (default **`main`**), `npm install`, `npm run build`, runs **`scripts/write-deploy-manifest.mjs`** when present, **`pm2 reload deaton-outreach`**, and **`curl` /health**. See `docs/RUN_AND_DEPLOY.md` for **GitHub Actions** approval-based deploy. First-time PM2 setup: **`docs/OPERATIONS.md`** → **First-time PM2 before `scripts/vps-deploy.sh`**.
+
+**Manual (same steps by hand):**
+
 ```bash
 # SSH into the VPS
 ssh deaton@<vps-ip>
@@ -257,8 +270,8 @@ cd /home/deaton/app
 # Pull latest code
 git pull origin main
 
-# Install any new dependencies
-npm install --production
+# Install any new dependencies (full install if needed to run npm run build)
+npm install
 
 # Rebuild TypeScript and admin UI
 npm run build
@@ -268,6 +281,7 @@ pm2 reload deaton-outreach
 
 # Verify
 pm2 status
+curl -sS "http://127.0.0.1:3000/health" | head -c 500
 pm2 logs deaton-outreach --lines 10
 ```
 

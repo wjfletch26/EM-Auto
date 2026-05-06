@@ -23,6 +23,88 @@ a {
   padding: 1rem 1.25rem 3rem;
 }
 
+.env-banner-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.85rem;
+  background: #0d0f14;
+  border: 1px solid #2d3340;
+  border-radius: 8px;
+}
+
+.env-chip {
+  display: inline-block;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.env-chip-production {
+  background: #8b1538;
+  color: #fff;
+  border: 1px solid #ff8a80;
+}
+
+.env-chip-staging {
+  background: #5c4a00;
+  color: #fffefb;
+  border: 1px solid #ffc107;
+}
+
+.env-chip-local {
+  background: #1e3a5f;
+  color: #e3f2fd;
+  border: 1px solid #64b5f6;
+}
+
+.env-chip-safe {
+  background: #4a148c;
+  color: #f3e5f5;
+  border: 1px solid #ce93d8;
+}
+
+.env-chip-dry {
+  background: #bf360c;
+  color: #fff3e0;
+  border: 1px solid #ffab40;
+}
+
+.env-chip-testrecv {
+  background: #e65100;
+  color: #fff;
+  border: 1px solid #ffcc80;
+}
+
+.env-chip-live {
+  background: #1b5e20;
+  color: #e8f5e9;
+  border: 1px solid #69f0ae;
+}
+
+.env-chip-muted {
+  background: #2a3038;
+  color: #9aa0a6;
+  border: 1px solid #3d4450;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.env-chip-warn {
+  background: #5d1a1a;
+  color: #ffcdd2;
+  border: 1px solid #ef5350;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
 h1 {
   font-size: 1.35rem;
   font-weight: 600;

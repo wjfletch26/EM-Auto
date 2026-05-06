@@ -37,13 +37,28 @@ pm2 logs deaton-outreach --lines 50   # Check why it stopped
 pm2 restart deaton-outreach            # Restart it
 ```
 
+### First-time PM2 before `scripts/vps-deploy.sh`
+
+`scripts/vps-deploy.sh` checks that **`pm2 describe <name>`** succeeds (default name **`deaton-outreach`**). On a **new** VPS, register the process **once** after `.env` and **`credentials/service-account.json`** exist, then save the PM2 list — see [DEPLOYMENT.md](./DEPLOYMENT.md) (PM2 / process manager), e.g.:
+
+```bash
+cd /home/deaton/app   # or your DEPLOY_PATH
+npm run build
+pm2 start dist/main.js --name deaton-outreach
+pm2 save
+```
+
+After that, routine updates use **`bash scripts/vps-deploy.sh`**. If you **must** run the deploy script before PM2 exists, set **`SKIP_PM2_CHECK=1`** for that **single** run only. **Do not** leave **`SKIP_PM2_CHECK=1`** in GitHub Actions, cron, or shell profiles — fix PM2 registration instead.
+
+The script creates **`.deploying`** in the app directory while it works and removes it when the script finishes (success or failure). Anything waiting for a stable process can treat **`.deploying` absent** plus **`/health`** OK as “deploy complete.” Production should pull **`DEPLOY_GIT_REF`** default **`main`**; override only for staging or emergencies (see script header comments).
+
 ### Is the unsubscribe endpoint reachable?
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" https://unsub.deatonengineering.us/health
+curl -sS "https://unsub.deatonengineering.us/health"
 ```
 
-Expected: `200`. If not: check Caddy status (`sudo systemctl status caddy`).
+Expect **`200`** with JSON: `status` (`healthy`, `safe_mode`, `degraded`, `failed`, …), `checks` (`googleSheets`, `smtp`, `scheduler`), and `deploy` (git `sha`, `deployer`, …). **`503`** when `status` is **`failed`** (critical checks).
 
 ### Admin UI and API (optional)
 
@@ -52,7 +67,9 @@ When `ADMIN_API_KEY` is set in `.env` and the app was built with `npm run build`
 - **Browser**: open `https://<your-public-host>/admin/` (same host you use for unsubscribe, e.g. `UNSUB_BASE_URL` without a trailing path). The server redirects `/` to `/admin/` when the admin UI is enabled.
 - **JSON API**: all routes are under `/api/admin/`. Authenticate with `Authorization: Bearer <ADMIN_API_KEY>` or `X-Admin-Key: <ADMIN_API_KEY>`.
 
-From the UI or API you can list and edit Sheets-backed contacts, company intelligence, and the review queue, and run **send cycle**, **pipeline cycle**, and **approval watcher** on demand. This is the primary way to drive those jobs when `SCHEDULER_ENABLED` is false (typical local/staging default).
+From the UI or API you can list and edit Sheets-backed contacts, company intelligence, and the review queue, and run **send cycle**, **pipeline cycle**, and **approval watcher** on demand — except when **`SAFE_MODE=true`** (then only **GET** requests are allowed; use read-only inspection until you disable safe mode).
+
+This is the primary way to drive those jobs when `SCHEDULER_ENABLED` is false (typical local/staging default).
 
 If `ADMIN_API_KEY` is unset, `/api/admin/*` returns **503** and the SPA is not served—by design.
 
@@ -66,6 +83,20 @@ Alternatively, check application logs:
 ```bash
 pm2 logs deaton-outreach --lines 50 | grep "Send cycle complete"
 ```
+
+---
+
+## SAFE_MODE (break-glass debugging)
+
+When production misbehaves, prefer **`SAFE_MODE=true`** over **`pm2 stop`** or ripping out cron:
+
+1. On the VPS, set **`SAFE_MODE=true`** in `.env` (or `.env.production`).
+2. **`pm2 reload deaton-outreach`**
+3. Confirm **`/health`** shows **`status: "safe_mode"`** and **`safeMode: true`**.
+4. Use **Admin GET** and **`/health`** to inspect; **POST/PATCH** and **cron** stay off.
+5. Fix root cause; set **`SAFE_MODE=false`** (or unset); **`pm2 reload`** again.
+
+Unsubscribe links keep working; do not rely on **`pm2 stop`** for investigations unless the process itself is dangerous.
 
 ---
 

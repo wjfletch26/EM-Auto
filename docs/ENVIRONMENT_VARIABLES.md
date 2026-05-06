@@ -71,7 +71,38 @@ At startup, the app logs an **email mode** string: `simulated_send`, `test_recip
 | --------------------- | ------- | -------- | ----------- |
 | `SCHEDULER_ENABLED`   | boolean | No       | **Default:** `true` when `APP_ENV=production`, **`false` when `APP_ENV` is `local` or `staging`.** Set to `true` explicitly to run background crons on a dev machine. |
 
-When the scheduler is off, the process still runs the web server and you can use the **admin API or `/admin` UI** to run send cycle, pipeline, and approval watcher manually.
+When the scheduler is off, the process still runs the web server and you can use the **admin API or `/admin` UI** to run send cycle, pipeline, and approval watcher manually — unless **`SAFE_MODE=true`**, which blocks **POST/PATCH** (see below).
+
+---
+
+## SAFE_MODE (production debugging)
+
+| Variable      | Type    | Required | Description |
+| ------------- | ------- | -------- | ----------- |
+| `SAFE_MODE`   | boolean | No       | Default `false`. When **`true`**: **cron is not started** (same effect as forcing scheduler off), and **Admin API** rejects **non-GET** requests so sheets are not mutated and automation is not triggered from the UI. **`/health`**, **unsubscribe**, and **read-only Admin inspection** still work. |
+
+Use this instead of stopping PM2 or editing live cron when you need a stable HTTP surface while investigating issues.
+
+---
+
+## Deploy metadata (optional, VPS)
+
+Written by **`scripts/write-deploy-manifest.mjs`** during **`scripts/vps-deploy.sh`** (or CI deploy). Read at startup for logs and exposed on **`/health`** under **`deploy`**.
+
+| Variable | Type | Required | Description |
+| -------- | ---- | -------- | ----------- |
+| `DEPLOY_MANIFEST_PATH` | string | No | Relative or absolute path to manifest JSON. Default: **`deploy-manifest.json`** at project root. |
+
+Manifest fields (typical): `sha`, `branch`, `time`, `deployer`, `appEnv`, `deploymentStatus` (`healthy`, `rollback`, etc.). See `scripts/write-deploy-manifest.mjs`.
+
+### `vps-deploy.sh` only (shell; not read by Node)
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `DEPLOY_GIT_REF` | `main` | `git pull origin <this ref>`. Keep production on **`main`**; override for staging or recovery only. |
+| `SKIP_PM2_CHECK` | unset | Set to **`1`** for a **single** bootstrap run if PM2 is not registered yet. **Do not** leave set in CI/cron. See **`docs/OPERATIONS.md`**. |
+
+Other deploy-script variables (`DEPLOY_PATH`, `PM2_APP_NAME`, `DEPLOY_LOCK_FILE`, `UNSUB_PORT`, `MIN_DISK_MB`) are documented in the header of **`scripts/vps-deploy.sh`**.
 
 ---
 

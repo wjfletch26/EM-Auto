@@ -55,3 +55,8 @@ credentials/
 *.tmp
 *.bak
 coverage/
+
+# VPS / deploy (written on server; optional local test artifacts)
+deploy-manifest.json
+.deploy.lock
+.deploying
