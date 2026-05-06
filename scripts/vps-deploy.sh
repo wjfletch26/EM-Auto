@@ -77,6 +77,8 @@ echo "==> npm install"
 npm install
 
 echo "==> npm run build"
+# Default Node heap is often too small for `tsc` + admin-ui on a small VPS (OOM during build).
+export NODE_OPTIONS="--max-old-space-size=4096${NODE_OPTIONS:+ ${NODE_OPTIONS}}"
 npm run build
 
 echo "==> deploy manifest"

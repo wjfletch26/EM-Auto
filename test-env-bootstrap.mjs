@@ -4,8 +4,22 @@
  *
  * GitHub Actions (and any host without `.env`): importing `src/config/index.ts` runs full Zod validation.
  * Parent and child test processes inherit `process.env` from this preload + whatever Node copies at spawn.
- * Set safe placeholders here only when a var is missing so CI matches laptops that use `.env`.
+ *
+ * Load order:
+ *   1) Project root `.env.test` if present (`override: true` — defines the test profile)
+ *   2) Safe placeholders below only when a var is still missing (`??=`)
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = __dirname;
+const testEnvPath = path.join(PROJECT_ROOT, '.env.test');
+if (fs.existsSync(testEnvPath)) {
+  dotenv.config({ path: testEnvPath, override: true });
+}
 
 const TEST_PROD_CANONICAL = '__test_prod_sheet_canonical__';
 const TEST_LOCAL_SHEET = '__test_local_sheet__';
