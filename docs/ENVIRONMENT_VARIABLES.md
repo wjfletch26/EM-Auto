@@ -95,6 +95,15 @@ Written by **`scripts/write-deploy-manifest.mjs`** during **`scripts/vps-deploy.
 
 Manifest fields (typical): `sha`, `branch`, `time`, `deployer`, `appEnv`, `deploymentStatus` (`healthy`, `rollback`, etc.). See `scripts/write-deploy-manifest.mjs`.
 
+### `vps-deploy.sh` only (shell; not read by Node)
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `DEPLOY_GIT_REF` | `main` | `git pull origin <this ref>`. Keep production on **`main`**; override for staging or recovery only. |
+| `SKIP_PM2_CHECK` | unset | Set to **`1`** for a **single** bootstrap run if PM2 is not registered yet. **Do not** leave set in CI/cron. See **`docs/OPERATIONS.md`**. |
+
+Other deploy-script variables (`DEPLOY_PATH`, `PM2_APP_NAME`, `DEPLOY_LOCK_FILE`, `UNSUB_PORT`, `MIN_DISK_MB`) are documented in the header of **`scripts/vps-deploy.sh`**.
+
 ---
 
 ## SMTP Configuration

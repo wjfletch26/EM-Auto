@@ -139,7 +139,7 @@ Full runbook (troubleshooting, common tasks, emergency procedures):
 5. The deploy job **SSHs** to the VPS and runs **`bash scripts/vps-deploy.sh`** from `DEPLOY_PATH`, which:
    - **Preflight:** `package.json`, `credentials/service-account.json`, disk headroom, **`pm2 describe`** (set `SKIP_PM2_CHECK=1` once for first-time PM2 if needed).
    - **Lock:** **`.deploy.lock`** + **`flock`** — a second overlapping deploy **exits immediately**.
-   - **`git pull origin main`**, **`npm install`**, **`npm run build`**, **`node scripts/write-deploy-manifest.mjs`** (writes `deploy-manifest.json` with **`GIT_SHA` / `GIT_REF` / `DEPLOYER`** from GitHub), **`pm2 reload deaton-outreach`**, **`curl` /health**.
+   - **`git pull origin $DEPLOY_GIT_REF`** (default **`main`**), **`npm install`**, **`npm run build`**, **`node scripts/write-deploy-manifest.mjs`** when the file exists (writes `deploy-manifest.json` with **`GIT_SHA` / `GIT_REF` / `DEPLOYER`** from GitHub), **`pm2 reload deaton-outreach`**, **`curl` /health**.
 
 **Rollback:** revert `main` (or check out a known-good SHA), redeploy with the same script or manual steps → [`DEPLOYMENT.md` → Rollback Procedure](DEPLOYMENT.md#rollback-procedure).
 

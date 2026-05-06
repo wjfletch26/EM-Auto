@@ -256,7 +256,7 @@ export DEPLOYER="$(whoami)"
 bash scripts/vps-deploy.sh
 ```
 
-That script runs **preflight** checks, acquires **`.deploy.lock`**, pulls `main`, `npm install`, `npm run build`, writes **`deploy-manifest.json`**, **`pm2 reload deaton-outreach`**, and **`curl` /health**. See `docs/RUN_AND_DEPLOY.md` for **GitHub Actions** approval-based deploy.
+That script runs **preflight** checks, acquires **`.deploy.lock`**, pulls **`DEPLOY_GIT_REF`** (default **`main`**), `npm install`, `npm run build`, runs **`scripts/write-deploy-manifest.mjs`** when present, **`pm2 reload deaton-outreach`**, and **`curl` /health**. See `docs/RUN_AND_DEPLOY.md` for **GitHub Actions** approval-based deploy. First-time PM2 setup: **`docs/OPERATIONS.md`** → **First-time PM2 before `scripts/vps-deploy.sh`**.
 
 **Manual (same steps by hand):**
 

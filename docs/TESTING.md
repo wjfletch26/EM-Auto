@@ -60,6 +60,17 @@ What this validates:
 - Unit tests pass.
 - Unsubscribe endpoint flow works (`/health` returns layered JSON — see `docs/RUN_AND_DEPLOY.md`, invalid token, expired token, valid token).
 
+### VPS deploy script (PR checklist automation)
+
+From the project root, `npm run verify:deploy-checklist` runs:
+
+1. **`scripts/verify-listen-localhost.mjs`** — default `listen(port)` (same as Express in `src/web/server.ts`) accepts **`http://127.0.0.1:<port>/`**, matching **`curl` targets in `scripts/vps-deploy.sh`** (`UNSUB_PORT`, default **3000** on the VPS).
+2. **`scripts/verify-vps-deploy-checklist.sh`** — two processes fight for the same lock file; the second **`flock -n`** fails, same idea as **`.deploy.lock`** in **`vps-deploy.sh`**. On Windows, **`npm run verify:deploy-checklist`** uses **WSL** (when **`wsl wslpath`** works) or **Docker** (when the engine is running) for the **`flock`** step if your shell does not have **`flock`** on `PATH`.
+
+**Credentials layout:** `vps-deploy.sh` preflight requires **`$DEPLOY_PATH/credentials/service-account.json`**, which matches [`DEPLOYMENT.md`](DEPLOYMENT.md) (file under the app directory, e.g. `/home/deaton/app/credentials/`).
+
+**Full script on staging:** on a host with **git**, **npm**, **pm2**, **`credentials/service-account.json`**, and **util-linux** `flock`, run **`bash scripts/vps-deploy.sh`** from **`DEPLOY_PATH`** (after a one-time **`pm2 start`** — see [`OPERATIONS.md`](OPERATIONS.md)). That is the end-to-end verification the automation does not replace.
+
 ---
 
 ## 2) Send Pipeline Test Email

@@ -37,6 +37,21 @@ pm2 logs deaton-outreach --lines 50   # Check why it stopped
 pm2 restart deaton-outreach            # Restart it
 ```
 
+### First-time PM2 before `scripts/vps-deploy.sh`
+
+`scripts/vps-deploy.sh` checks that **`pm2 describe <name>`** succeeds (default name **`deaton-outreach`**). On a **new** VPS, register the process **once** after `.env` and **`credentials/service-account.json`** exist, then save the PM2 list — see [DEPLOYMENT.md](./DEPLOYMENT.md) (PM2 / process manager), e.g.:
+
+```bash
+cd /home/deaton/app   # or your DEPLOY_PATH
+npm run build
+pm2 start dist/main.js --name deaton-outreach
+pm2 save
+```
+
+After that, routine updates use **`bash scripts/vps-deploy.sh`**. If you **must** run the deploy script before PM2 exists, set **`SKIP_PM2_CHECK=1`** for that **single** run only. **Do not** leave **`SKIP_PM2_CHECK=1`** in GitHub Actions, cron, or shell profiles — fix PM2 registration instead.
+
+The script creates **`.deploying`** in the app directory while it works and removes it when the script finishes (success or failure). Anything waiting for a stable process can treat **`.deploying` absent** plus **`/health`** OK as “deploy complete.” Production should pull **`DEPLOY_GIT_REF`** default **`main`**; override only for staging or emergencies (see script header comments).
+
 ### Is the unsubscribe endpoint reachable?
 
 ```bash

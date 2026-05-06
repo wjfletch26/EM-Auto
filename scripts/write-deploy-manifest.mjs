@@ -1,7 +1,12 @@
-/**
- * Writes deploy-manifest.json at repo root from environment variables.
- * Called from vps-deploy.sh after build; GHA sets GIT_SHA, GIT_REF, DEPLOYER.
- */
+// Writes deploy-manifest.json at the repo root from environment variables.
+// Invoked by scripts/vps-deploy.sh after `npm run build`.
+//
+// Typical VPS / CI env:
+//   GIT_SHA, GIT_REF, DEPLOYER — set by the deploy host or GitHub Actions.
+//   MANIFEST_APP_ENV — defaults to production when unset.
+//   MANIFEST_DEPLOYMENT_STATUS — "healthy" or "rollback" (default healthy).
+//   DEPLOY_MANIFEST_NAME — output filename (default deploy-manifest.json; path is always repo root).
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
