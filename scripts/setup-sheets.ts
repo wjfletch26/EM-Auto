@@ -32,6 +32,7 @@ const TABS: Record<string, string[]> = {
     'bounced', 'bounce_type', 'bounce_date', 'soft_bounce_count',
     'custom_1', 'custom_2', 'notes',
     'company_url', 'pipeline_status',
+    'last_profile_version_used_for_generation',
   ],
   Campaigns: [
     'campaign_id', 'campaign_name', 'total_steps',

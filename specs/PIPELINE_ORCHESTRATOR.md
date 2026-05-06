@@ -23,7 +23,7 @@ The pipeline is **opt-in**: it only runs when `PIPELINE_ENABLED=true`. When disa
 | Company profile refresh | `src/engine/company-profile-refresh.ts` | Monthly cron re-research for stale Company Profiles |
 | Intelligence mutex | `src/engine/intelligence-job-mutex.ts` | Excludes pipeline vs refresh overlap |
 | Canonical URL lock | `src/utils/company-url-lock.ts` | Queues concurrent work for the same company |
-| Approval Watcher | `src/engine/approval-watcher.ts` | Scans Review Queue for fully approved sequences and creates campaigns |
+| Approval Watcher | `src/engine/approval-watcher.ts` | Incremental single-step sync: approved Review Queue steps → Campaigns row (append step 1, patch 2–12) |
 | Company Research | `src/skills/company-research.ts` | Calls Perplexity; returns structured `CompanyProfile` |
 | Deaton Alignment | `src/skills/deaton-alignment.ts` | Calls LLM with knowledge base; returns alignment + case study selection |
 | Email Generator | `src/skills/email-generator.ts` | Calls LLM; returns 12 `EmailDraft` objects |
@@ -153,33 +153,36 @@ Canonical company key: `normalizeCanonicalCompanyUrl(contact.company_url)` (HTTP
 **Algorithm:**
 
 ```
-1. Read Review Queue and Contacts tabs in parallel
+1. Read Review Queue, Contacts, and Campaigns in parallel
 
 2. Group review queue entries by contact email
    - Skip entries where status = 'superseded'
 
-3. For each contact email group:
-   a. Filter to approved entries
-   b. Skip if any entry already has a campaign_id (already loaded)
-   c. Run validateApprovedSteps():
-      - Requires exactly 12 entries, one per step 1–12
-      - No duplicate step numbers
-      - Each entry must have non-blank subject and body
-   d. If validation fails → log warning and skip
+3. For each contact email group (at most ONE mutation per contact this run):
+   a. Filter to approved entries; build deduplicated step map (collectApprovedStepsByStep)
+   b. Determine max step already present on the Campaigns row (maxSyncedStepFromCampaign)
+   c. nextStep = maxSynced + 1; if nextStep > 12 → skip
+   d. validateContiguousApprovedPrefix(stepMap, nextStep): steps 1..nextStep must be approved with non-empty subject/body
+   e. If the Review Queue row for nextStep already has contact.campaign_id → skip (already synced)
+   f. No contact campaign_id and nextStep = 1:
+      - If step‑1 row already carries a stray campaign_id → skip (orphan row)
+      - Else append Campaigns row: campaign_id "ai_<slug>_<timestamp>", name "AI: <company>",
+        total_steps=12, populate ONLY step 1 triplet (template=ai_review_queue:<row>, subject,
+        delay 0); remaining triplets blank; active=TRUE, campaign_type=ai_generated
+      - Update that step‑1 Review Queue row with campaign_id and approved_date
+      - Update contact: pipeline_status=approved, campaign_id
+   g. Else contact already has campaign_id:
+      - Load campaign row (_rowIndex from getCampaigns); PATCH only nextStep triplet
+        (same template pattern; delay 0 for step 1, 30 for steps 2–12 when patching)
+      - Update that step’s Review Queue row with campaign_id and approved_date
+      - Optionally set pipeline_status=approved if not already
 
-4. For each validated set:
-   a. Generate campaign_id: "ai_<company_slug>_<timestamp>"
-   b. Build Campaigns tab row:
-      - campaign_id, name ("AI: <company>"), total_steps=12
-      - For each step: template=ai_review_queue:<rowIndex>, subject, delay_days
-        (step 1 delay = 0; steps 2–12 delay = 30 days)
-      - active=TRUE, campaign_type=ai_generated
-   c. Append campaign row to Campaigns tab
-   d. Update all 12 review queue rows with campaign_id and approved_date
-   e. Update contact: pipeline_status = 'approved', campaign_id = <new campaign>
+Each cron invocation promotes at most one new step per contact (no “catch‑up drain” of
+steps 5–10 in one pass). Further approved steps sync on subsequent runs.
+validateApprovedSteps(full 12‑row checks) remains for tests / tooling.
 ```
 
-**After approval watcher runs**, the contact is eligible for the send engine on its next cron cycle. The send engine detects the contact has `pipeline_status = 'approved'` and a valid `campaign_id` and treats it as a normal sequence contact.
+**After approval watcher runs**, once step 1 is synced the contact has a `campaign_id` and is eligible when the sequence engine permits (first send still gated by delays / `lastSendDate`). Operators can approve later steps anytime; loading into Campaigns waits for contiguous approval plus prior steps on sheet.
 
 ---
 
@@ -214,8 +217,8 @@ prompts/
 | `Contacts` | `pipeline_status`, `company_url`, `email`, metadata | `pipeline_status`, `campaign_id` |
 | `Company Profiles` | All columns (join on canonical URL) | Append + update (research, alignment, refresh, company errors) |
 | `Company Intelligence` | All columns (per-contact briefing, join key) | Append + update (intel + contact-scoped errors, executive brief) |
-| `Review Queue` | All columns (idempotency check, approval check) | Append 12 rows (Phase B), `campaign_id` / `approved_date` (Approval Watcher) |
-| `Campaigns` | — | Append one row per approved sequence (Approval Watcher) |
+| `Review Queue` | All columns (idempotency check, approval check) | Append 12 rows (Phase B); incremental `campaign_id` / `approved_date` only on steps synced by Approval Watcher |
+| `Campaigns` | — | Approval Watcher: append row with step 1 only when first syncing; PATCH one triplet per later step |
 
 ---
 
@@ -230,14 +233,20 @@ export function normalizeGreetingBody(body: string, firstName: string): string;
 
 // approval-watcher.ts
 export async function runApprovalWatcherCycle(): Promise<void>;
+export function collectApprovedStepsByStep(approved: ReviewQueueEntry[]): ApprovedStepsCollectionResult;
+export function validateContiguousApprovedPrefix(
+  stepMap: Map<number, ReviewQueueEntry>,
+  upToInclusive: number,
+): { ok: boolean; reason?: string };
+export function maxSyncedStepFromCampaign(campaign: Campaign | undefined): number;
+export function planIncrementalCampaignSync(
+  contact: Contact | undefined,
+  entries: ReviewQueueEntry[],
+  campaign: Campaign | undefined,
+): IncrementalCampaignSyncPlan;
+/** Legacy — full 12 approved rows validation (tests / tooling). */
 export function validateApprovedSteps(approved: ReviewQueueEntry[]): ApprovedValidationResult;
 export function buildApprovalContactUpdate(): Partial<ContactUpdate>;
-
-export interface ApprovedValidationResult {
-  ok: boolean;
-  reason?: string;
-  stepMap: Map<number, ReviewQueueEntry>;
-}
 ```
 
 ---

@@ -128,6 +128,23 @@ function evaluateContact(contact, campaign, now):
 
 ## Design Decisions
 
+### Incremental AI campaign loading (approval watcher)
+
+For `campaign_type = ai_generated`, the Approval Watcher does **not** require all twelve Review Queue rows to be approved before any send. It implements a **single-step sync**:
+
+- **`runApprovalWatcherCycle()`** reads Review Queue + Contacts **+ Campaigns** (for `_rowIndex` on campaign rows).
+- For each contact email it promotes **at most one step per invocation**: the smallest `nextStep` where steps `1 … nextStep` are approved with non‑empty subject/body and steps `1 … nextStep − 1` already exist as triplets on the Campaign row.
+  - **`nextStep = 1`**: append a **new** Campaign row with only the first template/subject/delay triplet filled (total_steps remains 12; other triplets stay blank until later runs).
+  - **`nextStep > 1`**: **patch** the existing row with that step’s triplet only.
+- **`campaign_id` on Review Queue** is set **only** for rows whose triplet has been written to Campaigns — not all twelve at once.
+- **`validateApprovedSteps` (legacy)** still verifies a full contiguous 12-step approved set where tooling needs “all approved” semantics.
+
+Critically: one cron tick must **not** “drain” every already-approved step in a single loop for the same contact; later steps sync on subsequent runs.
+
+**Sending cadence** — when each synced step may actually mail — stays entirely in **`src/engine/sequence-engine.ts`**: `nextStep = contact.lastStepSent + 1`, `lastSendDate`, step `delayDays`, and the minimum spacing floor (`MIN_MONTHLY_DELAY_DAYS`) for steps after the first.
+
+---
+
 ### Any Reply Halts the Sequence
 
 If a contact has any `replyStatus` (QUALIFIED, NOT_INTERESTED, UNCLEAR, etc.), the sequence is halted. Rationale:

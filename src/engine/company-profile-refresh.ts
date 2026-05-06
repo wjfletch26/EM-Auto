@@ -17,6 +17,10 @@ import { normalizeCanonicalCompanyUrl, researchUrlFromCanonical } from '../utils
 import { withCanonicalCompanyLock } from '../utils/company-url-lock.js';
 import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job-mutex.js';
 import { storedProfileHasAlignment } from './company-profile-helpers.js';
+import { companyNeedsRefreshSpend, type CompanyRefreshSpendSnapshot } from './company-actionable.js';
+import { contactsAtCanonical, hasUnsyncedTailReviewRows, parseProfileVersionInt } from './sequence-funnel-state.js';
+import { maxSyncedStepFromCampaign } from './approval-watcher.js';
+import type { Campaign } from '../services/sheets-types.js';
 
 function lastTouchEpochMs(row: { lastRefreshedAt: string; researchedDate: string }): number {
   const ts = row.lastRefreshedAt?.trim() || row.researchedDate?.trim();
@@ -28,6 +32,109 @@ function lastTouchEpochMs(row: { lastRefreshedAt: string; researchedDate: string
 function appendLimitedError(prev: string, msg: string): string {
   const existing = prev ? `${prev}\n` : '';
   return `${existing}[${new Date().toISOString()}] ${msg}`.slice(0, 5000);
+}
+
+/**
+ * After a successful profile refresh, set `regenerate_future_sequence` when tail RQ work exists
+ * and profile version advanced past `lastProfileVersionUsedForGeneration` per contact.
+ */
+async function armRegenerateFutureSequenceAfterRefresh(
+  canonical: string,
+  newProfileVersion: string,
+): Promise<void> {
+  const [contacts, reviewQueue, campaignRows] = await Promise.all([
+    sheets.getContacts(),
+    sheets.getReviewQueue(),
+    sheets.getCampaigns(),
+  ]);
+
+  const campaignById = new Map<string, Campaign>();
+  for (const c of campaignRows) {
+    const id = c.campaignId?.trim();
+    if (id && !campaignById.has(id)) campaignById.set(id, c);
+  }
+
+  const pv = parseProfileVersionInt(newProfileVersion);
+  const at = contactsAtCanonical(contacts, canonical);
+
+  for (const contact of at) {
+    const cid = contact.campaignId?.trim();
+    const campaign = cid ? campaignById.get(cid) : undefined;
+    const maxSynced = maxSyncedStepFromCampaign(campaign);
+
+    if (maxSynced >= 12) continue;
+
+    if (contact.lastStepSent >= 12 && maxSynced < 12) {
+      logger.warn(
+        {
+          module: 'company-refresh',
+          event: 'regen-skip',
+          contact: contact.email,
+          reason: 'inconsistent_last_step_vs_campaign',
+        },
+        'Skip arming future-tail regen — sheet inconsistency',
+      );
+      continue;
+    }
+
+    if (!hasUnsyncedTailReviewRows(contact.email, maxSynced, reviewQueue)) {
+      logger.info(
+        {
+          module: 'company-refresh',
+          event: 'regen-skip',
+          contact: contact.email,
+          reason: 'no_unsynced_tail_review_rows',
+        },
+        'No unsynced Review Queue tail for this contact',
+      );
+      continue;
+    }
+
+    const lastUsed = parseProfileVersionInt(contact.lastProfileVersionUsedForGeneration);
+    if (pv <= lastUsed) {
+      logger.info(
+        {
+          module: 'company-refresh',
+          event: 'regen-skip',
+          contact: contact.email,
+          reason: 'already_generated_for_profile_version',
+          profileVersion: pv,
+          previousVersion: lastUsed,
+        },
+        'Profile version did not advance past last generation version for contact',
+      );
+      continue;
+    }
+
+    if (contact.pipelineStatus?.trim().toLowerCase() === 'regenerate_future_sequence') {
+      logger.info(
+        {
+          module: 'company-refresh',
+          event: 'regen-skip',
+          contact: contact.email,
+          reason: 'already_regenerate_future_sequence',
+        },
+        'Contact already queued for future-tail regen',
+      );
+      continue;
+    }
+
+    logger.info(
+      {
+        module: 'company-refresh',
+        event: 'regen-trigger',
+        contact: contact.email,
+        fromStep: maxSynced + 1,
+        profileVersion: pv,
+        previousVersion: lastUsed,
+      },
+      'Arming regenerate_future_sequence after profile refresh',
+    );
+
+    await sheets.updateContact(contact.email, contact._rowIndex, {
+      pipelineStatus: 'regenerate_future_sequence',
+    });
+  }
 }
 
 /**
@@ -45,7 +152,26 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
     const staleMs = config.pipeline.companyStaleAfterDays * 86_400_000;
     const cutoff = Date.now() - staleMs;
     const rows = await sheets.getCompanyProfiles();
-    let queued = 0;
+
+    const [contacts, reviewQueue, campaignRows] = await Promise.all([
+      sheets.getContacts(),
+      sheets.getReviewQueue(),
+      sheets.getCampaigns(),
+    ]);
+    const campaignById = new Map<string, Campaign>();
+    for (const c of campaignRows) {
+      const id = c.campaignId?.trim();
+      if (id && !campaignById.has(id)) campaignById.set(id, c);
+    }
+    const nowDate = new Date();
+    const spendSnapshot: CompanyRefreshSpendSnapshot = {
+      contacts,
+      reviewQueue,
+      campaignById,
+      now: nowDate,
+    };
+
+    let refreshAttempts = 0;
 
     for (const row of rows) {
       if (!storedProfileHasAlignment(row)) continue;
@@ -56,7 +182,18 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
       const canonical = normalizeCanonicalCompanyUrl(row.canonicalCompanyUrl);
       if (!canonical) continue;
 
-      queued += 1;
+      if (!companyNeedsRefreshSpend(canonical, spendSnapshot)) {
+        logger.info(
+          {
+            module: 'company-refresh',
+            event: 'refresh-skip',
+            canonical,
+            reason: 'no_refresh_spend_worthwhile',
+          },
+          'Skipped stale profile refresh — companyNeedsRefreshSpend is false',
+        );
+        continue;
+      }
 
       await withCanonicalCompanyLock(canonical, async () => {
         const freshList = await sheets.getCompanyProfiles();
@@ -100,6 +237,11 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
           });
 
           logger.info({ ...log, status: companyStatus, profileVersion: nextVersion }, 'Company profile refreshed');
+          refreshAttempts += 1;
+
+          if (!alignment.no_fit_flag) {
+            await armRegenerateFutureSequenceAfterRefresh(canonical, nextVersion);
+          }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.error({ ...log, error: msg }, 'Company profile refresh failed — keeping prior alignment columns');
@@ -111,8 +253,8 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
       });
     }
 
-    if (queued > 0) {
-      logger.info({ module: 'company-refresh', queued }, 'Company profile refresh pass finished');
+    if (refreshAttempts > 0) {
+      logger.info({ module: 'company-refresh', refreshAttempts }, 'Company profile refresh pass finished');
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

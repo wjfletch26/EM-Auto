@@ -32,6 +32,7 @@ const ENGINE_FIELDS = new Set<string>([
   'bounceDate',
   'softBounceCount',
   'pipelineStatus',
+  'lastProfileVersionUsedForGeneration',
 ]);
 
 const PROFILE_FIELDS = new Set<string>([
@@ -453,6 +454,32 @@ export function createAdminRouter(): Router {
       await sheets.updateContact(email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
       await runPipelineCycle();
       res.json({ ok: true, supersededReviewRows: n });
+    }),
+  );
+
+  r.post(
+    '/actions/contacts/:email/regenerate-future-sequence',
+    asyncHandler(async (req, res, _next) => {
+      const email = parseEmailParam(req);
+      const contacts = await sheets.getContacts();
+      const contact = contacts.find((c) => c.email === email);
+      if (!contact) {
+        res.status(404).json({ error: 'Contact not found' });
+        return;
+      }
+      if (!contact.campaignId?.trim()) {
+        res.status(400).json({ error: 'Contact has no campaign_id; future regen requires a synced AI campaign.' });
+        return;
+      }
+
+      adminLog(req, { action: 'regenerate_future_sequence', email });
+      // Forces version gate in Branch B so operator-triggered runs always re-evaluate against the current profile.
+      await sheets.updateContact(email, contact._rowIndex, {
+        pipelineStatus: 'regenerate_future_sequence',
+        lastProfileVersionUsedForGeneration: '',
+      });
+      await runPipelineCycle();
+      res.json({ ok: true });
     }),
   );
 

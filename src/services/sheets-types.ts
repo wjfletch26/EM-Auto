@@ -31,6 +31,11 @@ export interface Contact {
   companyUrl: string;
   /** Pipeline status — tracks the contact through the intelligence pipeline. */
   pipelineStatus: string;
+  /**
+   * Last Company Profiles `profile_version` the contact’s generated Review Queue content
+   * was produced against (column Y). Empty = never set / pre-migration.
+   */
+  lastProfileVersionUsedForGeneration: string;
   /** 1-indexed row number in the sheet — used for targeted cell updates. */
   _rowIndex: number;
 }
@@ -60,6 +65,7 @@ export interface ContactUpdate {
   notes: string;
   companyUrl: string;
   pipelineStatus: string;
+  lastProfileVersionUsedForGeneration: string;
 }
 
 /** A single step within a campaign sequence. */
@@ -79,6 +85,8 @@ export interface Campaign {
   active: boolean;
   /** 'template' for Handlebars campaigns, 'ai_generated' for pipeline-created ones. */
   campaignType: 'template' | 'ai_generated';
+  /** Sheet row number (first data row = 2) — set by getCampaigns for mutations. */
+  _rowIndex?: number;
 }
 
 /** A row from the Send Log tab (append-only). */
@@ -131,6 +139,7 @@ export const FIELD_TO_COLUMN: Record<keyof ContactUpdate, string> = {
   notes: 'V',
   companyUrl: 'W',
   pipelineStatus: 'X',
+  lastProfileVersionUsedForGeneration: 'Y',
 };
 
 /**

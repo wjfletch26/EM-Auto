@@ -30,6 +30,7 @@ const minimalContact = {
   notes: '',
   companyUrl: 'https://x.com',
   pipelineStatus: 'queued',
+  lastProfileVersionUsedForGeneration: '',
 };
 
 describe('buildDashboardSummary', () => {

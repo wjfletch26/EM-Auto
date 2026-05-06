@@ -41,6 +41,7 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     notes: '',
     companyUrl: '',
     pipelineStatus: '',
+    lastProfileVersionUsedForGeneration: '',
     _rowIndex: 2,
     ...overrides,
   };
