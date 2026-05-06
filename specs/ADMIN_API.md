@@ -135,13 +135,15 @@ Soft-deletes a contact (sets a deleted flag in Sheets; does not remove the row).
 
 ## Company Intelligence Routes
 
+Per-contact linkage and briefing (**Company Intelligence** tab — columns `contact_email` through `error_log`; shared research lives on **Company Profiles**).
+
 ### `GET /api/admin/company-intelligence`
 
 Returns all rows from the `Company Intelligence` tab.
 
 **Response 200:**
 ```json
-{ "companyIntelligence": [ { "contactEmail": "...", "companyName": "...", ... } ] }
+{ "companyIntelligence": [ { "contactEmail": "...", "canonicalCompanyUrl": "...", ... } ] }
 ```
 
 ---
@@ -150,7 +152,32 @@ Returns all rows from the `Company Intelligence` tab.
 
 Updates fields on an existing company intelligence row. Returns **404** if not found. Returns **400** if no valid fields are provided.
 
-All values are written as strings (`null` clears to empty). The full list of updatable fields matches the `CompanyIntelUpdate` type in `src/services/sheets-types.ts`.
+All values are written as strings (`null` clears to empty). Updatable fields match `CompanyIntelUpdate` in `src/services/sheets-types.ts`.
+
+**Response 200:** `{ "ok": true }`
+
+---
+
+## Company Profiles Routes
+
+Shared intelligence (**Company Profiles** tab — one row per canonical company URL).
+
+### `GET /api/admin/company-profiles`
+
+Returns all rows from the `Company Profiles` tab.
+
+**Response 200:**
+```json
+{ "companyProfiles": [ { "canonicalCompanyUrl": "...", ... } ] }
+```
+
+---
+
+### `PATCH /api/admin/company-profiles/:rowIndex`
+
+Updates editable columns on one profile row by **Sheets row index** (integer ≥ 2). Column **A** (`canonical_company_url`) is not patched here.
+
+Body fields mirror `StoredCompanyProfile` (excluding `_rowIndex` and `canonicalCompanyUrl`). See `parseCompanyProfilePatch` in `src/web/routes/admin/router.ts`.
 
 **Response 200:** `{ "ok": true }`
 
@@ -216,6 +243,14 @@ Returns **409 Conflict** if a send cycle is already running (mutex held).
 Manually triggers one intelligence pipeline cycle (`runPipelineCycle`).
 
 Runs Phase A (research/alignment) and Phase B (generation) for eligible contacts. Returns immediately if `PIPELINE_ENABLED=false` (no-op).
+
+**Response 200:** `{ "ok": true }`
+
+---
+
+### `POST /api/admin/actions/company-profile-refresh`
+
+Runs `runCompanyProfileRefreshCycle()` once: re-researches stale **Company Profiles** rows (eligible when `PIPELINE_ENABLED=true`, `PIPELINE_COMPANY_REFRESH_ENABLED=true`, profile age exceeds `PIPELINE_COMPANY_STALE_AFTER_DAYS`, mutex not held).
 
 **Response 200:** `{ "ok": true }`
 

@@ -37,7 +37,7 @@ const DATA_ROW_END = 10000;
  * Per-tab layout: total columns (A=1 → count) and 0-based column indices for body rows
  * that operators typically edit. Log tabs are usually view-only — no extra tint.
  *
- * Contacts: identity + campaign (A–F), custom/notes/url (T–W), pipeline (X) is often set by humans to start flows.
+ * Contacts: identity + campaign (A–F), custom/notes/url (T–W), pipeline (X), profile gen version (Y).
  * Campaigns: entire row is configured by humans.
  * Company Intelligence: email/url often sourced manually; david notes + pipeline are common human edits.
  * Review Queue: approval workflow touches status, reviewer notes, approved date, campaign id.
@@ -47,7 +47,7 @@ const SHEET_LAYOUTS: Record<
   { colCount: number; userBodyColumnIndices: number[] }
 > = {
   Contacts: {
-    colCount: 24,
+    colCount: 25,
     userBodyColumnIndices: [0, 1, 2, 3, 4, 5, 19, 20, 21, 22, 23],
   },
   Campaigns: {
@@ -56,9 +56,13 @@ const SHEET_LAYOUTS: Record<
   },
   'Send Log': { colCount: 8, userBodyColumnIndices: [] },
   'Reply Log': { colCount: 6, userBodyColumnIndices: [] },
+  'Company Profiles': {
+    colCount: 17,
+    userBodyColumnIndices: [1, 15, 16],
+  },
   'Company Intelligence': {
-    colCount: 18,
-    userBodyColumnIndices: [0, 1, 12, 14],
+    colCount: 8,
+    userBodyColumnIndices: [0, 1, 2, 3, 5],
   },
   'Review Queue': {
     colCount: 16,

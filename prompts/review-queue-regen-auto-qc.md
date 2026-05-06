@@ -18,6 +18,11 @@ If instructions conflict, follow the order above.
 - Do not fabricate facts or case studies.
 - Follow the step purpose and CTA intent for this step unless QC issues require a change.
 
+## Geography / in-person visits
+{{geography_visit_policy}}
+
+When the block above says headquarters are **not** Texas Triangle–proximal, your rewrite **MUST NOT** include: sending/dispatching/deploying engineers to them, on-site commissioning at their facility, on-site support at their site, visiting their facility/plant, or "whether that's sending engineers…" style lists that imply staff travel to **their** site. Fix **all** remediation issues verbatim in spirit.
+
 ## Deaton profile
 {{deaton_profile}}
 

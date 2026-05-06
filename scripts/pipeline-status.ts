@@ -12,10 +12,11 @@ import * as sheets from '../src/services/sheets.js';
 async function main(): Promise<void> {
   console.log('=== Deaton Intelligence Pipeline — Status ===\n');
 
-  const [contacts, intel, queue] = await Promise.all([
+  const [contacts, intel, queue, profiles] = await Promise.all([
     sheets.getContacts(),
     sheets.getCompanyIntelligence(),
     sheets.getReviewQueue(),
+    sheets.getCompanyProfiles(),
   ]);
 
   // ── Contacts Overview ──
@@ -33,7 +34,26 @@ async function main(): Promise<void> {
     console.log(`  ${status}: ${count}`);
   }
 
-  // ── Company Intelligence Overview ──
+  // ── Company Profiles (shared intelligence) ──
+  console.log(`\nCompany Profiles Tab: ${profiles.length} rows`);
+  const profileStatusCounts: Record<string, number> = {};
+  for (const row of profiles) {
+    const status = row.pipelineStatus || '(empty)';
+    profileStatusCounts[status] = (profileStatusCounts[status] || 0) + 1;
+  }
+  for (const [status, count] of Object.entries(profileStatusCounts).sort()) {
+    console.log(`  ${status}: ${count}`);
+  }
+
+  const profileErrors = profiles.filter((r) => r.errorLog?.trim());
+  if (profileErrors.length > 0) {
+    console.log(`\n  ⚠ ${profileErrors.length} company profile row(s) with errors:`);
+    for (const row of profileErrors) {
+      console.log(`    ${row.canonicalCompanyUrl}: ${row.errorLog.slice(0, 100)}`);
+    }
+  }
+
+  // ── Company Intelligence Overview (per contact) ──
   console.log(`\nCompany Intelligence Tab: ${intel.length} rows`);
   const intelStatusCounts: Record<string, number> = {};
   for (const row of intel) {

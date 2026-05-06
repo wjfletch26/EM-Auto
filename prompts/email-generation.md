@@ -21,6 +21,10 @@ You MUST return valid JSON matching the schema described below. Do not include a
   Each block is separated from the next by `\n\n`. Keep each block focused; avoid a single dense wall of text.
 - Do NOT include unsubscribe links or physical address — the send engine appends those.
 - Do NOT end with a letter-style closing (Best, Sincerely, Regards, etc.), a placeholder like [Your Name], or a standalone company signature line — the send engine appends the real signature. Stop on your last substantive sentence or CTA.
+- **Visits / in-person:** Follow **Geography / in-person visits** below for every step (especially step 9). Never promise to stop by or visit **their** facility unless that block explicitly allows it.
+
+## Geography / in-person visits:
+{{geography_visit_policy}}
 
 ## Deaton Profile:
 {{deaton_profile}}
@@ -75,5 +79,6 @@ Instructions:
 5. If David's project notes are provided, incorporate them as the primary proof point in the most impactful emails (steps 3, 4, 10).
 6. Keep each email within the word count guidance from the structure.
 7. Apply the body layout rules above on every email so recipients see clear paragraphs, not one block of text.
+8. Honor **Geography / in-person visits** for the company’s headquarters: do not offer to visit them unless they are treated as Texas Triangle–proximal there.
 
 Return the full 12-email sequence as a JSON object matching the schema provided.

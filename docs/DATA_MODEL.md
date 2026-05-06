@@ -4,11 +4,7 @@
 
 The system uses **Google Sheets** as the primary data store and **local JSON files** for crash-recovery state. There is no database at MVP.
 
-The Google Spreadsheet contains four tabs (worksheets):
-1. **Contacts** — Master contact list with status tracking
-2. **Campaigns** — Campaign and sequence definitions
-3. **Send Log** — Record of every email sent
-4. **Reply Log** — Record of every reply classified
+The Google Spreadsheet contains the outreach tabs documented below (minimal list): **Contacts**, **Campaigns**, **Send Log**, **Reply Log**, plus pipeline tabs **Company Profiles** (shared company intelligence), **Company Intelligence** (per-contact briefing/linkage), **Review Queue**, etc. See [`scripts/setup-sheets.ts`](../scripts/setup-sheets.ts) for the canonical header rows.
 
 ---
 
@@ -43,7 +39,11 @@ This is the main operational tab. Each row is one contact.
 | U | `custom_2` | string | Optional custom field for templates. | `(any value)` |
 | V | `notes` | string | Operator notes. Not used by the system. | `Met at trade show` |
 | W | `company_url` | string | Company website URL (intelligence pipeline). | `https://acme.com` |
-| X | `pipeline_status` | string | Pipeline state for AI-generated sequences (e.g. `new`, `alignment_complete`). | `new` |
+| X | `pipeline_status` | string | Pipeline state for AI-generated sequences (e.g. `new`, `alignment_complete`). See **Upstream gate** below for `company_intelligence_blocked`. | `new` |
+
+**Upstream sequence gate (Track B):** When [`evaluateSequenceGenerationGate`](../src/engine/sequence-generation-gate.ts) fails before email generation, the pipeline sets **`company_intelligence_blocked`** on this column and appends a single-line **`[UPSTREAM_GATE] code=<REASON>`** message to **Company Intelligence** `error_log` (shared company row is not repurposed as a per-contact gate). Primary reason codes include: `LOW_ALIGNMENT_CONFIDENCE`, `MISSING_CASE_STUDY_SELECTION`, `MISSING_PRODUCT_SUMMARY`, `MISSING_SIGNAL_SUMMARY`, `INVALID_CANONICAL_URL`, `DUPLICATE_COMPANY_PROFILE_KEY`, `NO_FIT`, `COMPANY_PROFILE_NOT_READY`. After fixing data or config, operators may clear the block via **Admin API** `POST /api/admin/actions/contacts/:email/clear-intelligence-block` (sets contact back to `alignment_complete` and strips upstream gate lines from Intel `error_log`).
+
+**Research / alignment phase:** When Phase A ([`processResearchAndAlignment`](../src/engine/pipeline-orchestrator.ts)) cannot finish (invalid URL, Perplexity/JSON/schema errors, sheet write issues, or alignment LLM failure), the contact is set to **`research_failed`** and Intel **`error_log`** receives **`[RESEARCH_PHASE] code=<REASON>`** plus a short detail string. Codes include `INVALID_CANONICAL_URL`, `RESEARCH_RESPONSE_INVALID_JSON`, `RESEARCH_RESPONSE_SCHEMA_INVALID`, `RESEARCH_API_ERROR`, `ALIGNMENT_EVALUATION_FAILED`, `PROFILE_ROW_MISSING_AFTER_WRITE`, `SHEETS_WRITE_FAILED`, `RESEARCH_PHASE_UNKNOWN`. The shared **Company Profiles** row (if it exists) is also moved to **`research_failed`** with the same line in its **`error_log`** when the failure is attributed to that company key. Monthly refresh uses the same prefix when setting **`refresh_failed`** on the profile row only.
 
 **Key rules:**
 - `email` is the primary key. Must be unique across all rows. The admin UI does not support changing email in place (append a new row instead).
@@ -116,6 +116,51 @@ Append-only log of every classified reply. Written by the reply processor (autom
 | D | `subject_snippet` | string | First 100 characters of the reply subject. | `Re: Quick question, John` |
 | E | `body_snippet` | string | First 200 characters of the reply body. | `Hi Dave, yes I'm interested in...` |
 | F | `source` | string | How this was classified: `auto` (system) or `manual` (human). | `auto` |
+
+---
+
+### Tab: Company Profiles
+
+**One row per canonical company website** (shared by every contact at that company). Perplexity research and Deaton alignment write here. Refreshed by the monthly profile refresh job.
+
+| Column | Header | Notes |
+|---|---|---|
+| A | `canonical_company_url` | Stable key from [`resolveCanonicalCompanyUrl`](../src/utils/resolve-canonical-company-url.ts) (normalization + optional allowlisted aliases in `knowledge/company-domain-aliases.json`) |
+| B | `company_url` | Operator-facing URL (often same as canonical) |
+| C | `company_name` | From research |
+| D | `industry` | From research |
+| E | `product_summary` | From research |
+| F | `company_size` | From research |
+| G | `signals` | JSON array string |
+| H | `signal_summary` | Text |
+| I | `deaton_capabilities_matched` | From alignment |
+| J | `case_studies_selected` | From alignment |
+| K | `alignment_rationale` | From alignment |
+| L | `confidence_score` | From alignment (`high` / `medium` / `low`) |
+| M | `pipeline_status` | Company-level lifecycle (`alignment_complete`, `no_fit`, `research_failed`, …) |
+| N | `researched_date` | ISO timestamp (first successful research) |
+| O | `last_refreshed_at` | ISO timestamp of latest successful refresh |
+| P | `profile_version` | Integer string; bump on each successful refresh |
+| Q | `error_log` | Company-level errors |
+
+**Operator runbook — duplicate column A or wrong joins:** There must be **exactly one** `Company Profiles` row per `canonical_company_url`. If two rows share the same key, merge data manually (backup the sheet first), delete the duplicate row, set **Company Intelligence** column B and **Contacts** `company_url` so they match the surviving canonical, then run `npx tsx scripts/audit-canonical-profiles.ts` (or open the dashboard **canonical audit** JSON) to confirm `duplicateProfileKeys` and `intelDrift` are empty.
+
+### Tab: Company Intelligence
+
+**One row per contact** in the pipeline: linkage to Company Profiles plus per-contact briefing.
+
+| Column | Header | Notes |
+|---|---|---|
+| A | `contact_email` | Must match Contacts.email |
+| B | `canonical_company_url` | Join key → Company Profiles column A |
+| C | `company_url` | Copy from Contacts for display |
+| D | `david_project_notes` | Highest-priority personalization notes for generation/QC |
+| E | `executive_brief` | Written after Phase B completes |
+| F | `pipeline_status` | Operator-visible mirror during generation (`complete`, failures, …) |
+| G | `generated_date` | When drafts landed in Review Queue |
+| H | `error_log` | Contact-level intelligence errors (including upstream gate lines prefixed `[UPSTREAM_GATE]`). |
+
+**Migration:** spreadsheets created under the old schema (single wide Company Intelligence tab with duplicated research columns per contact) must add **Company Profiles**, reshape **Company Intelligence** to columns A–H, and dedupe shared research rows. See operational notes in repo specs (`specs/MIGRATION_COMPANY_PROFILES.md`).
 
 ---
 

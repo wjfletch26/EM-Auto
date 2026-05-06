@@ -1,6 +1,6 @@
 /**
- * Admin REST API — CRUD on Sheets-backed contacts, company intelligence, review queue,
- * and actions to run send cycle, pipeline, and approval watcher.
+ * Admin REST API — CRUD on Sheets-backed contacts, Company Intelligence,
+ * Company Profiles, review queue, and actions for send / pipeline / refresh jobs.
  */
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { logger } from '../../../logging/logger.js';
@@ -10,10 +10,15 @@ import type {
   ContactProfileUpdate,
   CompanyIntelUpdate,
   ReviewQueueUpdate,
+  StoredCompanyProfile,
 } from '../../../services/sheets-types.js';
 import { executeSendCycle } from '../../../engine/send-engine.js';
 import { runPipelineCycle } from '../../../engine/pipeline-orchestrator.js';
 import { runApprovalWatcherCycle } from '../../../engine/approval-watcher.js';
+import { runCompanyProfileRefreshCycle } from '../../../engine/company-profile-refresh.js';
+import {
+  stripUpstreamGateLinesFromErrorLog,
+} from '../../../engine/sequence-generation-gate.js';
 
 const ENGINE_FIELDS = new Set<string>([
   'status',
@@ -30,6 +35,7 @@ const ENGINE_FIELDS = new Set<string>([
   'bounceDate',
   'softBounceCount',
   'pipelineStatus',
+  'lastProfileVersionUsedForGeneration',
 ]);
 
 const PROFILE_FIELDS = new Set<string>([
@@ -50,6 +56,40 @@ function adminLog(req: Request, extra: Record<string, unknown>): void {
 
 function parseEmailParam(req: Request): string {
   return decodeURIComponent(String(req.params.email || '')).trim().toLowerCase();
+}
+
+/** Partial update for Company Profiles row (column A canonical URL is never changed here). */
+function parseCompanyProfilePatch(
+  body: unknown,
+): Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>> {
+  if (!body || typeof body !== 'object') {
+    throw new Error('Body must be an object');
+  }
+  const src = body as Record<string, unknown>;
+  const keys: (keyof Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>)[] = [
+    'companyUrl',
+    'companyName',
+    'industry',
+    'productSummary',
+    'companySize',
+    'signals',
+    'signalSummary',
+    'deatonCapabilitiesMatched',
+    'caseStudiesSelected',
+    'alignmentRationale',
+    'confidenceScore',
+    'pipelineStatus',
+    'researchedDate',
+    'lastRefreshedAt',
+    'profileVersion',
+    'errorLog',
+  ];
+  const updates: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>> = {};
+  for (const k of keys) {
+    if (src[k] === undefined) continue;
+    (updates as Record<string, string>)[k] = src[k] === null ? '' : String(src[k]);
+  }
+  return updates;
 }
 
 function partitionContactPatch(body: Record<string, unknown>): {
@@ -249,6 +289,46 @@ export function createAdminRouter(): Router {
   );
 
   r.get(
+    '/company-profiles',
+    asyncHandler(async (req, res, _next) => {
+      const rows = await sheets.getCompanyProfiles();
+      adminLog(req, { action: 'list_company_profiles', count: rows.length });
+      res.json({ companyProfiles: rows });
+    }),
+  );
+
+  r.patch(
+    '/company-profiles/:rowIndex',
+    asyncHandler(async (req, res, _next) => {
+      const rowIndex = parseInt(String(req.params.rowIndex), 10);
+      if (!Number.isFinite(rowIndex) || rowIndex < 2) {
+        res.status(400).json({ error: 'Invalid rowIndex' });
+        return;
+      }
+      let updates: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>>;
+      try {
+        updates = parseCompanyProfilePatch(req.body);
+      } catch {
+        res.status(400).json({ error: 'Invalid JSON body' });
+        return;
+      }
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ error: 'No valid fields to update' });
+        return;
+      }
+      const profiles = await sheets.getCompanyProfiles();
+      const prow = profiles.find((p) => p._rowIndex === rowIndex);
+      if (!prow) {
+        res.status(404).json({ error: 'Company profile row not found' });
+        return;
+      }
+      adminLog(req, { action: 'patch_company_profile', rowIndex, fields: Object.keys(updates) });
+      await sheets.updateCompanyProfileRow(prow.canonicalCompanyUrl, rowIndex, updates);
+      res.json({ ok: true });
+    }),
+  );
+
+  r.get(
     '/review-queue',
     asyncHandler(async (req, res, _next) => {
       const email = String(req.query.email || '')
@@ -299,6 +379,15 @@ export function createAdminRouter(): Router {
   );
 
   r.post(
+    '/actions/company-profile-refresh',
+    asyncHandler(async (req, res, _next) => {
+      adminLog(req, { action: 'company_profile_refresh' });
+      await runCompanyProfileRefreshCycle();
+      res.json({ ok: true });
+    }),
+  );
+
+  r.post(
     '/actions/pipeline-cycle',
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'pipeline_cycle' });
@@ -312,6 +401,28 @@ export function createAdminRouter(): Router {
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'approval_watcher' });
       await runApprovalWatcherCycle();
+      res.json({ ok: true });
+    }),
+  );
+
+  r.post(
+    '/actions/contacts/:email/clear-intelligence-block',
+    asyncHandler(async (req, res, _next) => {
+      const email = parseEmailParam(req);
+      const contacts = await sheets.getContacts();
+      const contact = contacts.find((c) => c.email === email);
+      if (!contact) {
+        res.status(404).json({ error: 'Contact not found' });
+        return;
+      }
+      const intelRows = await sheets.getCompanyIntelligence();
+      const intel = intelRows.find((r) => r.contactEmail === email);
+      adminLog(req, { action: 'clear_intelligence_block', email });
+      await sheets.updateContact(email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
+      if (intel) {
+        const cleaned = stripUpstreamGateLinesFromErrorLog(intel.errorLog || '');
+        await sheets.updateCompanyIntelligence(email, intel._rowIndex, { errorLog: cleaned });
+      }
       res.json({ ok: true });
     }),
   );
@@ -368,6 +479,32 @@ export function createAdminRouter(): Router {
       await sheets.updateContact(email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
       await runPipelineCycle();
       res.json({ ok: true, supersededReviewRows: n });
+    }),
+  );
+
+  r.post(
+    '/actions/contacts/:email/regenerate-future-sequence',
+    asyncHandler(async (req, res, _next) => {
+      const email = parseEmailParam(req);
+      const contacts = await sheets.getContacts();
+      const contact = contacts.find((c) => c.email === email);
+      if (!contact) {
+        res.status(404).json({ error: 'Contact not found' });
+        return;
+      }
+      if (!contact.campaignId?.trim()) {
+        res.status(400).json({ error: 'Contact has no campaign_id; future regen requires a synced AI campaign.' });
+        return;
+      }
+
+      adminLog(req, { action: 'regenerate_future_sequence', email });
+      // Forces version gate in Branch B so operator-triggered runs always re-evaluate against the current profile.
+      await sheets.updateContact(email, contact._rowIndex, {
+        pipelineStatus: 'regenerate_future_sequence',
+        lastProfileVersionUsedForGeneration: '',
+      });
+      await runPipelineCycle();
+      res.json({ ok: true });
     }),
   );
 

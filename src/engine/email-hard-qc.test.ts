@@ -22,7 +22,17 @@ test('runHardEmailQC flags em dash', () => {
     davidProjectNotes: '',
   });
   assert.equal(r.pass, false);
-  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('em dash')));
+  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('U+2014')));
+});
+
+test('runHardEmailQC flags horizontal bar (U+2015)', () => {
+  const r = runHardEmailQC({
+    emails: [{ step: 1, subject: 'Hi', body: `We build systems\u2015fast.` }],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+  });
+  assert.equal(r.pass, false);
+  assert.ok((r.issuesByStep.get(1) ?? []).some((m) => m.includes('U+2015')));
 });
 
 test('runHardEmailQC allows en dash inside numeric range only', () => {
@@ -59,6 +69,39 @@ test('runHardEmailQC requires David notes anchor when notes are long enough', ()
     davidProjectNotes: notes,
   });
   assert.equal(rOk.pass, true);
+});
+
+test('runHardEmailQC flags on-site engineer promises when HQ outside Texas Triangle', () => {
+  const r = runHardEmailQC({
+    emails: [
+      {
+        step: 9,
+        subject: 'Geo',
+        body: 'Central Texas logistics lets us support you whether sending engineers for on-site commissioning or shipments.',
+      },
+    ],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+    headquarters: 'San Francisco, CA',
+  });
+  assert.equal(r.pass, false);
+  assert.ok((r.issuesByStep.get(9) ?? []).some((m) => m.includes('Texas Triangle')));
+});
+
+test('runHardEmailQC allows same copy when HQ is Texas Triangle–proximal', () => {
+  const r = runHardEmailQC({
+    emails: [
+      {
+        step: 9,
+        subject: 'Geo',
+        body: 'We can send engineers for on-site commissioning when helpful.',
+      },
+    ],
+    allowlistedCaseStudyIds: [],
+    davidProjectNotes: '',
+    headquarters: 'Austin, TX',
+  });
+  assert.equal(r.pass, true);
 });
 
 test('mergeHardQCIntoReview merges step issues and flags', () => {

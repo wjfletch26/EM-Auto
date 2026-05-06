@@ -249,6 +249,19 @@ code {
   font-size: 0.82rem;
 }
 
+.small-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem;
+  color: var(--text);
+}
+
+.compact-list {
+  margin: 0.25rem 0 0.85rem 1.1rem;
+  padding: 0;
+  line-height: 1.45;
+}
+
 .token-bar {
   margin-bottom: 1.25rem;
 }

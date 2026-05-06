@@ -153,6 +153,8 @@ When the scheduler is off, the process still runs the web server and you can use
 | `ADMIN_API_KEY`    | string  | No       | Shared secret for `/api/admin/*`. If unset or empty, admin JSON routes return **503** and the SPA is not served. Send as `Authorization: Bearer <key>` or `X-Admin-Key: <key>`. | `(long random secret)` |
 | `ADMIN_UI_ENABLED` | boolean | No       | When `ADMIN_API_KEY` is set, serve the built admin app at `/admin`. Default: `true`.                                                                                             | `true`                 |
 
+**Contact actions:** `POST /api/admin/actions/contacts/:email/clear-intelligence-block` clears **`company_intelligence_blocked`**: sets Contacts `pipeline_status` to `alignment_complete` and strips `[UPSTREAM_GATE]` lines from Company Intelligence `error_log`. Same auth as other `/api/admin/*` routes.
+
 ---
 
 ## Recipes
@@ -197,6 +199,36 @@ See [`.env.example`](../.env.example) in the repo root for a commented template.
 ## Startup logging
 
 On boot, the app logs **runtime environment** (structured): `appEnv`, `emailMode`, `schedulerEnabled`, and a **partially redacted** active spreadsheet ID. Full redacted config may also be logged for operators.
+
+---
+
+## Sequence generation gate and lineage (Track B)
+
+Aligned with [`src/config/schema.ts`](../src/config/schema.ts) `generationGate` and `lineage` objects. Defaults are permissive (e.g. minimum alignment confidence `low`); tighten in production to avoid expensive generation when company intelligence is weak.
+
+| Variable | Default | Description |
+|---|---|---|
+| `GENERATION_MIN_ALIGNMENT_CONFIDENCE` | `low` | Minimum stored `confidence_score` on Company Profiles: `low` \| `medium` \| `high` (ordered; contacts below threshold are blocked with `LOW_ALIGNMENT_CONFIDENCE`). |
+| `GENERATION_BLOCK_ON_EMPTY_CASE_STUDIES` | `false` | When `true`, block when `case_studies_selected` is empty (`MISSING_CASE_STUDY_SELECTION`). |
+| `GENERATION_REQUIRE_PRODUCT_SUMMARY` | `false` | When `true`, require non-empty `product_summary` (`MISSING_PRODUCT_SUMMARY`). |
+| `GENERATION_REQUIRE_SIGNAL_SUMMARY` | `false` | When `true`, require non-empty `signal_summary` (`MISSING_SIGNAL_SUMMARY`). |
+| `GENERATION_REQUIRE_PARSABLE_SIGNALS_JSON` | `false` | When `true`, require `signals` to parse as a JSON array; invalid or non-array JSON is blocked with `MISSING_SIGNAL_SUMMARY` (see gate implementation). |
+| `PROMPT_VERSION` | `1` | Logged and stamped on successful generation (executive brief / Review Queue notes) for lineage. |
+| `QC_RUBRIC_VERSION` | `1` | Same as `PROMPT_VERSION` for QC rubric identity. |
+
+---
+
+## Intelligence pipeline (optional LLM enrichment)
+
+Aligned with [`src/config/schema.ts`](../src/config/schema.ts) `pipeline` object.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PIPELINE_ENABLED` | `false` | Master switch — when `false`, `runPipelineCycle` and scheduled profile refresh exit immediately. |
+| `PIPELINE_CRON` | `*/5 * * * *` | Cadence for `runPipelineCycle` + approval watcher (when pipeline enabled). |
+| `PIPELINE_COMPANY_REFRESH_CRON` | `0 3 1 * *` | Cadence for `runCompanyProfileRefreshCycle`. |
+| `PIPELINE_COMPANY_REFRESH_ENABLED` | `true` | When `false`, company profile refresh is never scheduled. |
+| `PIPELINE_COMPANY_STALE_AFTER_DAYS` | `28` | Profiles older than this (from `last_refreshed_at` / fallback `researched_date`) are refreshed. |
 
 ---
 
