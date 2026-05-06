@@ -36,6 +36,8 @@ export interface QualityReviewContext {
   alignmentJson: string;
   davidProjectNotes: string;
   emailStructure: string;
+  /** From headquarters: Texas Triangle proximity rules for visits / step 9. */
+  geographyVisitPolicy?: string;
 }
 
 // ─── Skill Entry Point ───────────────────────────────────────────────────────
@@ -71,6 +73,7 @@ export async function reviewEmailQuality(
     alignment_json: context?.alignmentJson ?? '{}',
     david_project_notes: context?.davidProjectNotes ?? '',
     email_structure: context?.emailStructure ?? '',
+    geography_visit_policy: context?.geographyVisitPolicy ?? '',
   });
 
   const rawResponse = await provider.complete({

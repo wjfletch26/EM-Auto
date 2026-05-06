@@ -10,16 +10,19 @@
 import { google, type sheets_v4 } from 'googleapis';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
+import { findDuplicateCompanyProfileKeys } from '../utils/canonical-sheet-audit.js';
 import type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
+  StoredCompanyProfile,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 } from './sheets-types.js';
 import {
   FIELD_TO_COLUMN,
   PROFILE_FIELD_TO_COLUMN,
   INTEL_FIELD_TO_COLUMN,
+  COMPANY_PROFILE_FIELD_TO_COLUMN,
   REVIEW_FIELD_TO_COLUMN,
 } from './sheets-types.js';
 
@@ -28,6 +31,7 @@ export type {
   Contact, ContactUpdate, ContactProfileUpdate, ContactAppendPayload, Campaign,
   SendLogEntry, ReplyLogEntry,
   CompanyIntelligence, CompanyIntelUpdate,
+  StoredCompanyProfile,
   ReviewQueueEntry, ReviewQueueUpdate, QcRegenAuditEntry,
 };
 
@@ -108,7 +112,7 @@ function toSheetCell(value: unknown): string | number {
 export async function getContacts(): Promise<Contact[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Contacts!A2:X' })
+    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Contacts!A2:Y' })
   );
 
   const rows = res.data.values || [];
@@ -160,6 +164,7 @@ export async function getContacts(): Promise<Contact[]> {
       notes: row[21] || '',
       companyUrl: row[22] || '',
       pipelineStatus: row[23] || '',
+      lastProfileVersionUsedForGeneration: row[24]?.trim() || '',
       _rowIndex: i + 2, // 1-indexed, +1 for the header row
     });
   }
@@ -181,7 +186,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
   );
 
   const rows = res.data.values || [];
-  return rows.map((row) => {
+  return rows.map((row, i) => {
     const totalSteps = parseInt(row[2]) || 0;
     const steps = [];
 
@@ -201,7 +206,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
 
     // active is at column index 3 + 12*3 = 39, campaign_type at 40
     const activeIdx = 3 + 12 * 3; // col AN (index 39)
-    const typeIdx = activeIdx + 1;  // col AO (index 40)
+    const typeIdx = activeIdx + 1; // col AO (index 40)
 
     return {
       campaignId: row[0]?.trim() || '',
@@ -210,8 +215,56 @@ export async function getCampaigns(): Promise<Campaign[]> {
       steps,
       active: row[activeIdx]?.toUpperCase() === 'TRUE',
       campaignType: (row[typeIdx]?.trim() || 'template') as 'template' | 'ai_generated',
+      _rowIndex: i + 2,
     };
   });
+}
+
+const MAX_CAMPAIGN_STEPS = 12;
+
+/** Converts 1-based column index (A=1, D=4) to sheet column letters. */
+function sheetColumnLettersFromOneBased(oneBased: number): string {
+  let n = oneBased;
+  let s = '';
+  while (n > 0) {
+    n -= 1;
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26);
+  }
+  return s;
+}
+
+/** Step N triplet starts at spreadsheet column index 4 + (n - 1) * 3 — D/E/F for step 1. */
+function campaignStepRangeForTriplets(stepNumber: number): { start: string; end: string } {
+  if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > MAX_CAMPAIGN_STEPS) {
+    throw new Error(`updateCampaignStepTriplets: invalid stepNumber ${stepNumber}`);
+  }
+  const startCol = 4 + (stepNumber - 1) * 3;
+  const start = sheetColumnLettersFromOneBased(startCol);
+  const end = sheetColumnLettersFromOneBased(startCol + 2);
+  return { start, end };
+}
+
+/** Writes template, subject, delay_days for one step on an existing Campaigns row. */
+export async function updateCampaignStepTriplets(
+  rowIndex: number,
+  stepNumber: number,
+  values: readonly [template: string, subject: string, delayDays: string],
+): Promise<void> {
+  const sheets = await getClient();
+  const { start, end } = campaignStepRangeForTriplets(stepNumber);
+  const range = `Campaigns!${start}${rowIndex}:${end}${rowIndex}`;
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        valueInputOption: 'RAW',
+        data: [{ range, values: [[values[0], values[1], values[2]]] }],
+      },
+    }),
+  );
+
+  logger.info({ module: 'sheets', rowIndex, stepNumber, range }, 'Campaign step triplet updated');
 }
 
 /** Reads the Send Log for deduplication checks. */
@@ -377,13 +430,14 @@ export async function appendContact(payload: ContactAppendPayload): Promise<void
     payload.notes?.trim() ?? '',
     payload.companyUrl?.trim() ?? '',
     payload.pipelineStatus?.trim() || 'new',
+    '', // last_profile_version_used_for_generation (column Y)
   ];
 
   const sheets = await getClient();
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Contacts!A:X',
+      range: 'Contacts!A:Y',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },
@@ -452,6 +506,49 @@ export async function markReviewQueueSupersededForContact(contactEmail: string):
   return targets.length;
 }
 
+/**
+ * Supersedes unsynced Review Queue rows from `fromStepInclusive` upward for this contact.
+ * Skips rows that are already `superseded`, have a `campaign_id` (synced), or are `approved`
+ * (operator trust — never wipe approved copy here).
+ */
+export async function markReviewQueueSupersededForContactStepsFrom(
+  contactEmail: string,
+  fromStepInclusive: number,
+): Promise<number> {
+  const normalized = contactEmail.trim().toLowerCase();
+  const queue = await getReviewQueue();
+  const targets = queue.filter(
+    (e) =>
+      e.contactEmail === normalized &&
+      Number.isInteger(e.stepNumber) &&
+      e.stepNumber >= fromStepInclusive &&
+      !e.campaignId?.trim() &&
+      e.status !== 'superseded' &&
+      e.status !== 'approved',
+  );
+
+  if (targets.length === 0) return 0;
+
+  const sheets = await getClient();
+  const data: sheets_v4.Schema$ValueRange[] = targets.map((e) => ({
+    range: `'Review Queue'!G${e._rowIndex}`,
+    values: [['superseded']],
+  }));
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data },
+    }),
+  );
+
+  logger.info(
+    { module: 'sheets', email: normalized, fromStep: fromStepInclusive, count: targets.length },
+    'Review queue tail rows superseded',
+  );
+  return targets.length;
+}
+
 /** Appends a row to the Send Log tab. */
 export async function appendSendLog(entry: SendLogEntry): Promise<void> {
   const sheets = await getClient();
@@ -492,18 +589,21 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
   );
 }
 
-// ─── Company Intelligence Tab ────────────────────────────────────────────────
+// ─── Company Profiles Tab ─────────────────────────────────────────────────────
 
-/** Reads all rows from the Company Intelligence tab. */
-export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
+/** Reads company-level research rows (one per canonical URL). */
+export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   const sheets = await getClient();
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Company Intelligence'!A2:R" })
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Profiles'!A2:Q",
+    }),
   );
 
   const rows = res.data.values || [];
-  return rows.map((row, i) => ({
-    contactEmail: row[0]?.trim().toLowerCase() || '',
+  const result = rows.map((row, i) => ({
+    canonicalCompanyUrl: row[0]?.trim() || '',
     companyUrl: row[1] || '',
     companyName: row[2] || '',
     industry: row[3] || '',
@@ -515,36 +615,154 @@ export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
     caseStudiesSelected: row[9] || '',
     alignmentRationale: row[10] || '',
     confidenceScore: row[11] || '',
-    davidProjectNotes: row[12] || '',
-    executiveBrief: row[13] || '',
-    pipelineStatus: row[14] || '',
-    researchedDate: row[15] || '',
-    generatedDate: row[16] || '',
-    errorLog: row[17] || '',
+    pipelineStatus: row[12] || '',
+    researchedDate: row[13] || '',
+    lastRefreshedAt: row[14] || '',
+    profileVersion: row[15] || '',
+    errorLog: row[16] || '',
+    _rowIndex: i + 2,
+  }));
+
+  const duplicateKeys = findDuplicateCompanyProfileKeys(result);
+  for (const d of duplicateKeys) {
+    logger.warn(
+      {
+        module: 'sheets',
+        event: 'duplicate_company_profile_key',
+        canonicalUrl: d.canonicalUrl,
+        rowIndices: d.rowIndices,
+      },
+      'Duplicate Company Profiles row(s) for same canonical_company_url',
+    );
+  }
+
+  return result;
+}
+
+/** Appends a new Company Profiles row after successful research bootstrap. */
+export async function appendCompanyProfile(entry: Omit<StoredCompanyProfile, '_rowIndex'>): Promise<void> {
+  const sheets = await getClient();
+  await withRetry(() =>
+    sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Profiles'!A:Q",
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[
+          entry.canonicalCompanyUrl,
+          entry.companyUrl,
+          entry.companyName,
+          entry.industry,
+          entry.productSummary,
+          entry.companySize,
+          entry.signals,
+          entry.signalSummary,
+          entry.deatonCapabilitiesMatched,
+          entry.caseStudiesSelected,
+          entry.alignmentRationale,
+          entry.confidenceScore,
+          entry.pipelineStatus,
+          entry.researchedDate,
+          entry.lastRefreshedAt,
+          entry.profileVersion,
+          entry.errorLog,
+        ]],
+      },
+    }),
+  );
+  logger.info({ module: 'sheets', canonicalUrl: entry.canonicalCompanyUrl }, 'Company profile row appended');
+}
+
+/**
+ * Updates fields on one Company Profiles row by row index (row 2 = first data row).
+ * Keeps canonical URL in column A stable after insert — do not remap companies here.
+ */
+export async function updateCompanyProfileRow(
+  canonicalCompanyUrlForLog: string,
+  rowIndex: number,
+  updates: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>>,
+): Promise<void> {
+  const sheets = await getClient();
+  const data: sheets_v4.Schema$ValueRange[] = [];
+
+  for (const [field, value] of Object.entries(updates)) {
+    const col =
+      COMPANY_PROFILE_FIELD_TO_COLUMN[field as keyof Omit<StoredCompanyProfile, '_rowIndex'>];
+    if (!col) continue;
+    data.push({
+      range: `'Company Profiles'!${col}${rowIndex}`,
+      values: [[value ?? '']],
+    });
+  }
+
+  if (data.length === 0) return;
+
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data },
+    }),
+  );
+
+  logger.info(
+    {
+      module: 'sheets',
+      canonicalUrl: canonicalCompanyUrlForLog,
+      fields: Object.keys(updates),
+    },
+    'Company profile updated',
+  );
+}
+
+// ─── Company Intelligence Tab ────────────────────────────────────────────────
+
+/** Reads per-contact linkage + briefing rows. */
+export async function getCompanyIntelligence(): Promise<CompanyIntelligence[]> {
+  const sheets = await getClient();
+  const res = await withRetry(() =>
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Company Intelligence'!A2:H",
+    }),
+  );
+
+  const rows = res.data.values || [];
+  return rows.map((row, i) => ({
+    contactEmail: row[0]?.trim().toLowerCase() || '',
+    canonicalCompanyUrl: row[1]?.trim() || '',
+    companyUrl: row[2] || '',
+    davidProjectNotes: row[3] || '',
+    executiveBrief: row[4] || '',
+    pipelineStatus: row[5] || '',
+    generatedDate: row[6] || '',
+    errorLog: row[7] || '',
     _rowIndex: i + 2,
   }));
 }
 
-/** Appends a new row to the Company Intelligence tab. */
+/** Appends a Company Intelligence row (one row per pipeline contact). */
 export async function appendCompanyIntelligence(entry: Omit<CompanyIntelligence, '_rowIndex'>): Promise<void> {
   const sheets = await getClient();
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Company Intelligence'!A:R",
+      range: "'Company Intelligence'!A:H",
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
         values: [[
-          entry.contactEmail, entry.companyUrl, entry.companyName,
-          entry.industry, entry.productSummary, entry.companySize,
-          entry.signals, entry.signalSummary, entry.deatonCapabilitiesMatched,
-          entry.caseStudiesSelected, entry.alignmentRationale, entry.confidenceScore,
-          entry.davidProjectNotes, entry.executiveBrief, entry.pipelineStatus,
-          entry.researchedDate, entry.generatedDate, entry.errorLog,
+          entry.contactEmail,
+          entry.canonicalCompanyUrl,
+          entry.companyUrl,
+          entry.davidProjectNotes,
+          entry.executiveBrief,
+          entry.pipelineStatus,
+          entry.generatedDate,
+          entry.errorLog,
         ]],
       },
-    })
+    }),
   );
   logger.info({ module: 'sheets', email: entry.contactEmail }, 'Company intelligence row appended');
 }

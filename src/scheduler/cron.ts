@@ -13,6 +13,7 @@ import { executeSendCycle } from '../engine/send-engine.js';
 import { processForwardedReplyQueue } from '../engine/reply-forward-processor.js';
 import { runPipelineCycle } from '../engine/pipeline-orchestrator.js';
 import { runApprovalWatcherCycle } from '../engine/approval-watcher.js';
+import { runCompanyProfileRefreshCycle } from '../engine/company-profile-refresh.js';
 
 /**
  * Returned handle so the main entrypoint can stop all jobs on shutdown.
@@ -69,6 +70,15 @@ async function runApprovalWatcherSafe(): Promise<void> {
   }
 }
 
+async function runCompanyProfileRefreshSafe(): Promise<void> {
+  try {
+    await runCompanyProfileRefreshCycle();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ module: 'scheduler', error: message }, 'Scheduled company profile refresh failed');
+  }
+}
+
 function writeHeartbeat(): void {
   logger.info(
     {
@@ -95,6 +105,15 @@ export function startScheduler(): SchedulerHandle {
     tasks.push(cron.schedule(config.pipeline.cron, () => void runPipelineCycleSafe()));
     tasks.push(cron.schedule(config.pipeline.cron, () => void runApprovalWatcherSafe()));
     logger.info({ module: 'scheduler', pipelineCron: config.pipeline.cron }, 'Pipeline scheduler enabled');
+    if (config.pipeline.companyRefreshEnabled) {
+      tasks.push(
+        cron.schedule(config.pipeline.companyRefreshCron, () => void runCompanyProfileRefreshSafe()),
+      );
+      logger.info(
+        { module: 'scheduler', companyRefreshCron: config.pipeline.companyRefreshCron },
+        'Company profile refresh scheduler enabled',
+      );
+    }
   }
 
   logger.info(
@@ -104,6 +123,7 @@ export function startScheduler(): SchedulerHandle {
       replyCron: config.schedule.replyCron,
       heartbeatCron: HEARTBEAT_CRON,
       pipelineEnabled: config.pipeline.enabled,
+      pipelineCompanyRefreshEnabled: config.pipeline.enabled && config.pipeline.companyRefreshEnabled,
     },
     'Scheduler started',
   );

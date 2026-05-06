@@ -17,6 +17,13 @@ describe('replaceEmDashesWithPlainHyphen', () => {
     );
   });
 
+  it('replaces horizontal bar (U+2015) like em dash', () => {
+    assert.equal(
+      replaceEmDashesWithPlainHyphen(`Alpha \u2015 beta`),
+      'Alpha - beta',
+    );
+  });
+
   it('leaves normal hyphens and text unchanged', () => {
     assert.equal(replaceEmDashesWithPlainHyphen('co-op'), 'co-op');
   });

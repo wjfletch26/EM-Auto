@@ -13,14 +13,16 @@ import { regenerateReviewQueueRow } from '../../ops/regenerate-review-queue-row.
 import {
   deleteReviewQueueRow,
   getCompanyIntelligence,
+  getCompanyProfiles,
   getContacts,
   getReviewQueue,
   updateCompanyIntelligence,
+  updateCompanyProfileRow,
   updateContact,
   updateReviewQueueEntry,
 } from '../../services/sheets.js';
-import type { CompanyIntelUpdate, ContactUpdate } from '../../services/sheets-types.js';
-import { FIELD_TO_COLUMN, INTEL_FIELD_TO_COLUMN } from '../../services/sheets-types.js';
+import type { CompanyIntelUpdate, ContactUpdate, StoredCompanyProfile } from '../../services/sheets-types.js';
+import { COMPANY_PROFILE_FIELD_TO_COLUMN, FIELD_TO_COLUMN, INTEL_FIELD_TO_COLUMN } from '../../services/sheets-types.js';
 import { createRateLimiterMiddleware } from '../../utils/rate-limiter.js';
 import { buildDashboardSummary } from '../dashboard-summary.js';
 import { requireDashboardAuth } from '../dashboard-auth.js';
@@ -61,6 +63,22 @@ function parseIntelUpdates(body: unknown): Partial<CompanyIntelUpdate> {
   const out: Partial<CompanyIntelUpdate> = {};
   const keys = Object.keys(INTEL_FIELD_TO_COLUMN) as (keyof CompanyIntelUpdate)[];
   for (const key of keys) {
+    if (src[key] === undefined) continue;
+    (out as Record<string, unknown>)[key] = String(src[key]);
+  }
+  return out;
+}
+
+/** Dashboard PATCH body: any profile column except A (`canonical_company_url`), which stays stable per row. */
+function parseCompanyProfileUpdates(
+  body: unknown,
+): Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>> {
+  if (!body || typeof body !== 'object') throw new Error('Request body must be a JSON object');
+  const src = body as Record<string, unknown>;
+  const out: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>> = {};
+  const keys = Object.keys(COMPANY_PROFILE_FIELD_TO_COLUMN) as (keyof StoredCompanyProfile)[];
+  for (const key of keys) {
+    if (key === 'canonicalCompanyUrl' || key === '_rowIndex') continue;
     if (src[key] === undefined) continue;
     (out as Record<string, unknown>)[key] = String(src[key]);
   }
@@ -121,12 +139,18 @@ export function createDashboardRouter(): Router {
     '/snapshot',
     ...guard,
     wrap(async (_req, res) => {
-      const [contacts, intel, queue] = await Promise.all([getContacts(), getCompanyIntelligence(), getReviewQueue()]);
+      const [contacts, intel, queue, profiles] = await Promise.all([
+        getContacts(),
+        getCompanyIntelligence(),
+        getReviewQueue(),
+        getCompanyProfiles(),
+      ]);
       res.set('Cache-Control', 'no-store');
       res.json({
-        summary: buildDashboardSummary(contacts, intel, queue),
+        summary: buildDashboardSummary(contacts, intel, queue, profiles),
         contacts,
         intelligence: intel,
+        companyProfiles: profiles,
         reviewQueue: queue,
       });
     }),
@@ -180,6 +204,27 @@ export function createDashboardRouter(): Router {
         return;
       }
       await updateCompanyIntelligence(row.contactEmail, rowIndex, updates);
+      res.json({ ok: true, rowIndex, updatedFields: Object.keys(updates) });
+    }),
+  );
+
+  router.patch(
+    '/company-profiles/:rowIndex',
+    ...guard,
+    wrap(async (req, res) => {
+      const rowIndex = parseSheetRow(req.params.rowIndex);
+      const updates = parseCompanyProfileUpdates(req.body);
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ error: 'No valid company profile fields in body' });
+        return;
+      }
+      const profiles = await getCompanyProfiles();
+      const row = profiles.find((p) => p._rowIndex === rowIndex);
+      if (!row) {
+        res.status(404).json({ error: 'Company profile row not found' });
+        return;
+      }
+      await updateCompanyProfileRow(row.canonicalCompanyUrl, rowIndex, updates);
       res.json({ ok: true, rowIndex, updatedFields: Object.keys(updates) });
     }),
   );

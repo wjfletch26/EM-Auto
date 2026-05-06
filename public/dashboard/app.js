@@ -6,7 +6,7 @@
   const API_BASE = '/api/dashboard';
   const TOKEN_KEY = 'deatonDashboardToken';
 
-  /** @type {{ summary: object, contacts: object[], intelligence: object[], reviewQueue: object[] } | null} */
+  /** @type {{ summary: object, contacts: object[], intelligence: object[], companyProfiles: object[], reviewQueue: object[] } | null} */
   let snapshot = null;
 
   function getToken() {
@@ -130,9 +130,194 @@
             .join('');
         }
       }
+      const cp = data.companyProfiles;
+      document.getElementById('metric-profiles-total').textContent = String(cp.total);
+      document.getElementById('metric-profiles-errors').textContent = String(cp.errorCount);
+      document.getElementById('breakdown-profiles').innerHTML = renderBars(cp.pipelineStatus);
+      const perrBody = document.getElementById('profile-errors-body');
+      if (perrBody) {
+        if (!cp.errors || cp.errors.length === 0) {
+          perrBody.innerHTML = '<tr><td colspan="2" class="muted">No profile errors logged.</td></tr>';
+        } else {
+          perrBody.innerHTML = cp.errors
+            .map(
+              (row) =>
+                `<tr><td class="mono">${escapeHtml(row.canonicalUrl)}</td><td class="mono">${escapeHtml(row.preview)}</td></tr>`,
+            )
+            .join('');
+        }
+      }
       const rq = data.reviewQueue;
       document.getElementById('metric-queue-total').textContent = String(rq.total);
       document.getElementById('breakdown-queue').innerHTML = renderBars(rq.status);
+
+      const ug = data.upstreamGate || { blockedContactCount: 0, blockedByReason: {}, samples: [] };
+      const mUb = document.getElementById('metric-upstream-blocked');
+      if (mUb) mUb.textContent = String(ug.blockedContactCount ?? 0);
+      const brUp = document.getElementById('breakdown-upstream-reasons');
+      if (brUp) {
+        const counts = ug.blockedByReason || {};
+        brUp.innerHTML =
+          ug.blockedContactCount > 0
+            ? renderBars(counts)
+            : '<p class="muted">No contacts in company_intelligence_blocked.</p>';
+      }
+
+      const rp = data.researchPhase || {};
+      const mRc = document.getElementById('metric-research-failed-contacts');
+      if (mRc) mRc.textContent = String(rp.contactsResearchFailed ?? 0);
+      const mRp = document.getElementById('metric-research-failed-profiles');
+      if (mRp) mRp.textContent = String(rp.profilesResearchOrRefreshFailed ?? 0);
+
+      const brCr = document.getElementById('breakdown-research-contact-reasons');
+      if (brCr) {
+        const counts = rp.contactFailuresByReason || {};
+        brCr.innerHTML =
+          (rp.contactsResearchFailed ?? 0) > 0
+            ? renderBars(counts)
+            : '<p class="muted">No contacts in research_failed.</p>';
+      }
+      const brPr = document.getElementById('breakdown-research-profile-reasons');
+      if (brPr) {
+        const counts = rp.profileFailuresByReason || {};
+        brPr.innerHTML =
+          (rp.profilesResearchOrRefreshFailed ?? 0) > 0
+            ? renderBars(counts)
+            : '<p class="muted">No company profiles in research_failed or refresh_failed.</p>';
+      }
+      const rcsBody = document.getElementById('research-contact-samples-body');
+      if (rcsBody) {
+        const rows = rp.contactSamples || [];
+        if (rows.length === 0) {
+          rcsBody.innerHTML = '<tr><td colspan="4" class="muted">No samples.</td></tr>';
+        } else {
+          rcsBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td>${escapeHtml(row.contactEmail)}</td><td class="mono">${escapeHtml(
+                  row.canonicalUrl || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.preview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
+      const rpsBody = document.getElementById('research-profile-samples-body');
+      if (rpsBody) {
+        const rows = rp.profileSamples || [];
+        if (rows.length === 0) {
+          rpsBody.innerHTML = '<tr><td colspan="4" class="muted">No samples.</td></tr>';
+        } else {
+          rpsBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td class="mono">${escapeHtml(row.canonicalUrl)}</td><td>${escapeHtml(
+                  row.pipelineStatus || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.preview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
+
+      const ch = data.companyHealth || { rows: [], truncated: false };
+      const chNote = document.getElementById('company-health-truncated');
+      if (chNote) {
+        if (ch.truncated) {
+          chNote.hidden = false;
+          chNote.textContent = `Showing first ${ch.rows.length} canonical rows (list truncated on server).`;
+        } else {
+          chNote.hidden = true;
+          chNote.textContent = '';
+        }
+      }
+      const chBody = document.getElementById('company-health-body');
+      if (chBody) {
+        if (!ch.rows || ch.rows.length === 0) {
+          chBody.innerHTML =
+            '<tr><td colspan="8" class="muted">No canonical keys in this snapshot (no contacts / profiles loaded).</td></tr>';
+        } else {
+          chBody.innerHTML = ch.rows
+            .map((row) => {
+              const p = row.profile;
+              const reasons = row.blockedByReason || {};
+              const reasonStr = sortedEntries(reasons)
+                .map(([k, n]) => `${escapeHtml(k)}: ${n}`)
+                .join(', ');
+              return `<tr>
+                <td class="mono">${escapeHtml(row.canonicalUrl)}</td>
+                <td>${escapeHtml(p ? p.pipelineStatus || '—' : '—')}</td>
+                <td>${escapeHtml(p ? p.confidenceScore || '—' : '—')}</td>
+                <td class="mono">${escapeHtml(p ? p.profileVersion || '—' : '—')}</td>
+                <td class="mono small">${escapeHtml(p ? (p.lastRefreshedAt || '').slice(0, 19) || '—' : '—')}</td>
+                <td>${row.duplicateProfileKey ? 'yes' : '—'}</td>
+                <td>${row.blockedContactsTotal}</td>
+                <td class="small">${reasonStr || '—'}</td>
+              </tr>`;
+            })
+            .join('');
+        }
+      }
+
+      const ca = data.canonicalAudit || { duplicateProfileKeys: [], intelDrift: [], intelDriftTruncated: false };
+      const caMount = document.getElementById('canonical-audit-mount');
+      if (caMount) {
+        const dups = ca.duplicateProfileKeys || [];
+        const drift = ca.intelDrift || [];
+        let html = '';
+        if (dups.length === 0 && drift.length === 0) {
+          html = '<p class="muted">No duplicate profile keys or intel drift in this snapshot.</p>';
+        } else {
+          if (dups.length > 0) {
+            html += '<h3 class="small-heading">Duplicate Company Profiles keys</h3><ul class="compact-list">';
+            html += dups
+              .map(
+                (d) =>
+                  `<li><span class="mono">${escapeHtml(d.canonicalUrl)}</span> — rows ${escapeHtml(
+                    (d.rowIndices || []).join(', '),
+                  )}</li>`,
+              )
+              .join('');
+            html += '</ul>';
+          }
+          if (drift.length > 0) {
+            html += `<h3 class="small-heading">Intel canonical drift${ca.intelDriftTruncated ? ' (truncated)' : ''}</h3>`;
+            html += '<div class="table-scroll"><table><thead><tr><th>Contact</th><th>Intel B</th><th>Expected</th><th>Row</th></tr></thead><tbody>';
+            html += drift
+              .map(
+                (r) =>
+                  `<tr><td>${escapeHtml(r.contactEmail)}</td><td class="mono">${escapeHtml(
+                    r.intelCanonical || '—',
+                  )}</td><td class="mono">${escapeHtml(r.expectedFromContact || '—')}</td><td>${r.rowIndex}</td></tr>`,
+              )
+              .join('');
+            html += '</tbody></table></div>';
+          }
+        }
+        caMount.innerHTML = html;
+      }
+
+      const ubBody = document.getElementById('upstream-samples-body');
+      if (ubBody) {
+        const rows = ug.samples || [];
+        if (rows.length === 0) {
+          ubBody.innerHTML =
+            '<tr><td colspan="4" class="muted">No upstream-blocked contacts (or no samples in this payload).</td></tr>';
+        } else {
+          ubBody.innerHTML = rows
+            .map(
+              (row) =>
+                `<tr><td>${escapeHtml(row.contactEmail)}</td><td class="mono">${escapeHtml(
+                  row.canonicalUrl || '—',
+                )}</td><td class="mono">${escapeHtml(row.reasonCode)}</td><td class="mono">${escapeHtml(
+                  row.errorPreview || '',
+                )}</td></tr>`,
+            )
+            .join('');
+        }
+      }
     } catch (e) {
       showError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -231,6 +416,11 @@
     const mount = document.getElementById('intel-mount');
     if (!mount || !snapshot) return;
     const list = snapshot.intelligence;
+    if (!list || list.length === 0) {
+      mount.innerHTML =
+        '<p class="muted">No Company intelligence rows yet (pipeline creates one per contact when enabled).</p>';
+      return;
+    }
     mount.innerHTML = list
       .map(
         (r) => `
@@ -239,15 +429,64 @@
           <span class="badge">${r._rowIndex}</span>
           <strong>${escapeHtml(r.contactEmail)}</strong>
           · <span class="status-tag">${escapeHtml(r.pipelineStatus || '')}</span>
+          ${r.canonicalCompanyUrl ? `<span class="subj mono" title="Join key">${escapeHtml((r.canonicalCompanyUrl || '').slice(0, 36))}</span>` : ''}
           ${r.errorLog ? `<span class="subj mono">${escapeHtml((r.errorLog || '').slice(0, 64))}</span>` : ''}
         </summary>
         <div class="i-detail">
+          <label>Canonical company URL (→ Company profiles col A) <input class="i-canon" type="text" value="${escapeHtml(r.canonicalCompanyUrl || '')}" /></label>
+          <label>Company URL (Contacts copy) <input class="i-curl" type="text" value="${escapeHtml(r.companyUrl || '')}" /></label>
           <label>Pipeline status <input class="i-pipe" type="text" value="${escapeHtml(r.pipelineStatus || '')}" /></label>
+          <label>Generated date <input class="i-gen" type="text" value="${escapeHtml(r.generatedDate || '')}" /></label>
           <label>David project notes <textarea class="i-david" rows="4">${escapeHtml(r.davidProjectNotes || '')}</textarea></label>
-          <label>Error log <textarea class="i-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
           <label>Executive brief <textarea class="i-brief" rows="4">${escapeHtml(r.executiveBrief || '')}</textarea></label>
+          <label>Error log <textarea class="i-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
           <div class="btn-row">
             <button type="button" data-act="save-i">Save intelligence row</button>
+          </div>
+        </div>
+      </details>`,
+      )
+      .join('');
+  }
+
+  function renderProfiles() {
+    const mount = document.getElementById('profiles-mount');
+    if (!mount || !snapshot) return;
+    const list = snapshot.companyProfiles || [];
+    if (list.length === 0) {
+      mount.innerHTML = '<p class="muted">No company profile rows (add the <strong>Company Profiles</strong> tab to the sheet or run <code>setup-sheets</code>).</p>';
+      return;
+    }
+    mount.innerHTML = list
+      .map(
+        (r) => `
+      <details class="p-row" data-row="${r._rowIndex}">
+        <summary>
+          <span class="badge">${r._rowIndex}</span>
+          <span class="mono" title="${escapeHtml(r.canonicalCompanyUrl)}">${escapeHtml((r.canonicalCompanyUrl || '').slice(0, 52))}</span>
+          · <span class="status-tag">${escapeHtml(r.pipelineStatus || '')}</span>
+          <span class="subj">${escapeHtml((r.companyName || '').slice(0, 48))}</span>
+        </summary>
+        <div class="p-detail">
+          <p class="muted small">Column A (canonical) is read-only here: <code>${escapeHtml(r.canonicalCompanyUrl || '')}</code></p>
+          <label>Display company URL <input class="p-url" type="text" value="${escapeHtml(r.companyUrl || '')}" /></label>
+          <label>Company name <input class="p-name" type="text" value="${escapeHtml(r.companyName || '')}" /></label>
+          <label>Industry <input class="p-ind" type="text" value="${escapeHtml(r.industry || '')}" /></label>
+          <label>Product summary <textarea class="p-prod" rows="3">${escapeHtml(r.productSummary || '')}</textarea></label>
+          <label>Company size <input class="p-size" type="text" value="${escapeHtml(r.companySize || '')}" /></label>
+          <label>Signals <textarea class="p-sig" rows="4">${escapeHtml(r.signals || '')}</textarea></label>
+          <label>Signal summary <textarea class="p-sigs" rows="3">${escapeHtml(r.signalSummary || '')}</textarea></label>
+          <label>Deaton capabilities matched <textarea class="p-cap" rows="3">${escapeHtml(r.deatonCapabilitiesMatched || '')}</textarea></label>
+          <label>Case studies selected <textarea class="p-cases" rows="3">${escapeHtml(r.caseStudiesSelected || '')}</textarea></label>
+          <label>Alignment rationale <textarea class="p-align" rows="3">${escapeHtml(r.alignmentRationale || '')}</textarea></label>
+          <label>Confidence score <input class="p-conf" type="text" value="${escapeHtml(r.confidenceScore || '')}" /></label>
+          <label>Pipeline status <input class="p-pipe" type="text" value="${escapeHtml(r.pipelineStatus || '')}" /></label>
+          <label>Researched date <input class="p-res" type="text" value="${escapeHtml(r.researchedDate || '')}" /></label>
+          <label>Last refreshed at <input class="p-lref" type="text" value="${escapeHtml(r.lastRefreshedAt || '')}" /></label>
+          <label>Profile version <input class="p-ver" type="text" value="${escapeHtml(r.profileVersion || '')}" /></label>
+          <label>Error log <textarea class="p-err" rows="3">${escapeHtml(r.errorLog || '')}</textarea></label>
+          <div class="btn-row">
+            <button type="button" data-act="save-p">Save profile row</button>
           </div>
         </div>
       </details>`,
@@ -260,6 +499,7 @@
     renderReviewQueue();
     renderContacts();
     renderIntel();
+    renderProfiles();
   }
 
   document.getElementById('save-token')?.addEventListener('click', () => {
@@ -291,6 +531,9 @@
   document.getElementById('reload-intel')?.addEventListener('click', () => {
     void reloadOperatorTables().catch(() => {});
   });
+  document.getElementById('reload-profiles')?.addEventListener('click', () => {
+    void reloadOperatorTables().catch(() => {});
+  });
 
   /** @param {string} tab */
   function activateTab(tab) {
@@ -311,7 +554,7 @@
       if (!tab) return;
       activateTab(tab);
       if (tab === 'overview') void loadOverview();
-      if (tab === 'queue' || tab === 'contacts' || tab === 'intel') {
+      if (tab === 'queue' || tab === 'contacts' || tab === 'intel' || tab === 'profiles') {
         void reloadOperatorTables().catch((e) => {
           showError(e instanceof Error ? e.message : String(e));
         });
@@ -430,14 +673,60 @@
     setLoading(true);
     try {
       const body = {
+        canonicalCompanyUrl: rowEl.querySelector('.i-canon')?.value ?? '',
+        companyUrl: rowEl.querySelector('.i-curl')?.value ?? '',
         pipelineStatus: rowEl.querySelector('.i-pipe')?.value ?? '',
+        generatedDate: rowEl.querySelector('.i-gen')?.value ?? '',
         davidProjectNotes: rowEl.querySelector('.i-david')?.value ?? '',
-        errorLog: rowEl.querySelector('.i-err')?.value ?? '',
         executiveBrief: rowEl.querySelector('.i-brief')?.value ?? '',
+        errorLog: rowEl.querySelector('.i-err')?.value ?? '',
       };
       await api(`/intelligence/${rowIndex}`, { method: 'PATCH', body: JSON.stringify(body) });
       await reloadOperatorTables();
       activateTab('intel');
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  document.getElementById('profiles-mount')?.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (t.getAttribute('data-act') !== 'save-p') return;
+    const rowEl = t.closest('.p-row');
+    if (!(rowEl instanceof HTMLElement)) return;
+    const rowIndex = parseInt(rowEl.getAttribute('data-row') || '', 10);
+    void handleProfileSave(rowIndex, rowEl);
+  });
+
+  async function handleProfileSave(rowIndex, rowEl) {
+    clearError();
+    setLoading(true);
+    try {
+      const body = {
+        companyUrl: rowEl.querySelector('.p-url')?.value ?? '',
+        companyName: rowEl.querySelector('.p-name')?.value ?? '',
+        industry: rowEl.querySelector('.p-ind')?.value ?? '',
+        productSummary: rowEl.querySelector('.p-prod')?.value ?? '',
+        companySize: rowEl.querySelector('.p-size')?.value ?? '',
+        signals: rowEl.querySelector('.p-sig')?.value ?? '',
+        signalSummary: rowEl.querySelector('.p-sigs')?.value ?? '',
+        deatonCapabilitiesMatched: rowEl.querySelector('.p-cap')?.value ?? '',
+        caseStudiesSelected: rowEl.querySelector('.p-cases')?.value ?? '',
+        alignmentRationale: rowEl.querySelector('.p-align')?.value ?? '',
+        confidenceScore: rowEl.querySelector('.p-conf')?.value ?? '',
+        pipelineStatus: rowEl.querySelector('.p-pipe')?.value ?? '',
+        researchedDate: rowEl.querySelector('.p-res')?.value ?? '',
+        lastRefreshedAt: rowEl.querySelector('.p-lref')?.value ?? '',
+        profileVersion: rowEl.querySelector('.p-ver')?.value ?? '',
+        errorLog: rowEl.querySelector('.p-err')?.value ?? '',
+      };
+      await api(`/company-profiles/${rowIndex}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await reloadOperatorTables();
+      void loadOverview();
+      activateTab('profiles');
     } catch (e) {
       showError(e instanceof Error ? e.message : String(e));
     } finally {

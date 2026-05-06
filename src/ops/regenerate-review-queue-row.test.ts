@@ -16,6 +16,7 @@ test('buildUserDirectedInputSources includes mandatory history and context', () 
   assert.deepEqual(parsed, [
     'user_notes',
     'david_project_notes',
+    'merged_contact_briefing',
     'qc_remediation_history',
     'sequence_context',
   ]);

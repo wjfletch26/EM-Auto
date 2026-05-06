@@ -102,3 +102,40 @@ export function loadPersona(contactTitle: string): string {
 export function loadEmailStructure(): string {
   return readKnowledgeFile('email-structure.yml');
 }
+
+/** Cached map: sequence step number → short purpose label from email-structure.yml. */
+let cachedEmailStepPurposes: Map<number, string> | undefined;
+
+/**
+ * Returns the canonical "purpose" line for a 1-based sequence step (1–12), e.g. "Introduction".
+ */
+export function emailPurposeForStep(step: number): string {
+  if (!Number.isInteger(step) || step < 1 || step > 12) {
+    return `Step ${step}`;
+  }
+  if (!cachedEmailStepPurposes) {
+    cachedEmailStepPurposes = buildEmailStepPurposeMap();
+  }
+  return cachedEmailStepPurposes.get(step) ?? `Step ${step}`;
+}
+
+/** Parses step / purpose pairs from email-structure.yml without a YAML dependency. */
+function buildEmailStepPurposeMap(): Map<number, string> {
+  const yaml = readKnowledgeFile('email-structure.yml');
+  const map = new Map<number, string>();
+  let currentStep: number | null = null;
+  const lines = yaml.split(/\n/);
+  for (const line of lines) {
+    const stepMatch = line.match(/^\s*-\s*step:\s*(\d+)\s*$/);
+    if (stepMatch) {
+      currentStep = parseInt(stepMatch[1], 10);
+      continue;
+    }
+    const purposeMatch = line.match(/^\s*purpose:\s*(.+)$/);
+    if (purposeMatch && currentStep !== null) {
+      map.set(currentStep, purposeMatch[1].trim());
+      currentStep = null;
+    }
+  }
+  return map;
+}

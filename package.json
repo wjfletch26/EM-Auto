@@ -30,6 +30,7 @@
     "sheets:migrate-qc-regen-state": "tsx scripts/migrate-qc-regen-state.ts",
     "deploy:write-manifest": "node scripts/write-deploy-manifest.mjs",
     "verify:deploy-checklist": "node scripts/run-deploy-checklist.mjs"
+    "sheets:audit-canonical": "tsx scripts/audit-canonical-profiles.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

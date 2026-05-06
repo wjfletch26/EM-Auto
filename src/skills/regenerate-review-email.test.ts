@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { buildQcRemediation, validateRegenParams } from './regenerate-review-email.js';
 
 test('buildQcRemediation caps issues and preserves one suggestion', () => {
-  const issues = Array.from({ length: 10 }, (_, i) => `Issue ${i + 1}`);
+  const issues = Array.from({ length: 12 }, (_, i) => `Issue ${i + 1}`);
   const out = buildQcRemediation(issues, 'Fix with concise proof and preserve CTA');
   assert.match(out, /Issues:/);
   assert.match(out, /1\. Issue 1/);
-  assert.doesNotMatch(out, /Issue 7/);
+  assert.match(out, /10\. Issue 10/);
+  assert.doesNotMatch(out, /Issue 11/);
   assert.match(out, /Suggested direction:/);
 });
 
