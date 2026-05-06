@@ -58,7 +58,7 @@ What this validates:
 
 - TypeScript build is clean.
 - Unit tests pass.
-- Unsubscribe endpoint flow works (`/health`, invalid token, expired token, valid token).
+- Unsubscribe endpoint flow works (`/health` returns layered JSON — see `docs/RUN_AND_DEPLOY.md`, invalid token, expired token, valid token).
 
 ---
 

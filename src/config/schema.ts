@@ -121,6 +121,11 @@ const appSchemaBase = z.object({
     .transform((s) => (s === undefined ? '' : s.trim())),
   /** Explicit override; when omitted, true only for APP_ENV=production. */
   schedulerEnabled: envBoolean.optional(),
+  /**
+   * When true: no background cron; Admin write/automation routes return 503.
+   * Scheduler is forced off regardless of SCHEDULER_ENABLED.
+   */
+  safeMode: envBoolean.default(false),
 });
 
 // --- Admin API + static UI (optional; routes return 503 when key unset) ---
@@ -221,10 +226,15 @@ export const configSchema = configSchemaBase
     }
   })
   .transform((data) => {
-    const schedulerEnabled =
+    const safeMode = Boolean(data.app.safeMode);
+
+    const schedulerEnabledRaw =
       data.app.schedulerEnabled !== undefined
         ? data.app.schedulerEnabled
         : data.app.appEnv === 'production';
+
+    // SAFE_MODE always wins: no cron / automation loops (see OPERATIONS.md).
+    const schedulerEnabled = Boolean(schedulerEnabledRaw) && !safeMode;
 
     const emailMode = deriveEmailMode(data.app.appEnv, data.app.dryRun);
 
@@ -232,6 +242,7 @@ export const configSchema = configSchemaBase
       ...data,
       app: {
         ...data.app,
+        safeMode,
         schedulerEnabled,
         emailMode,
       },

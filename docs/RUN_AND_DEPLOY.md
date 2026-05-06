@@ -26,6 +26,7 @@ The startup validator refuses to boot if these don't line up correctly.
 | `DRY_RUN`                          | `true` (simulated) **or** unset       | must be **unset** or `false`           |
 | `TEST_RECIPIENT`                   | a real inbox you control              | must be **empty / unset**              |
 | `SCHEDULER_ENABLED`                | `false` (you trigger jobs by hand)    | `true` (cron runs send + reply cycles) |
+| `SAFE_MODE`                        | optional (see below)                  | optional; when `true`, **cron off**, **Admin POST/PATCH disabled**, `/health` + unsubscribe + GET Admin still work |
 | Where it runs                      | your laptop, `npm run dev`            | VPS, PM2 (`pm2 start ...`)             |
 
 If you mis-configure any of those, the app fails fast at startup with a clear
@@ -90,9 +91,10 @@ it from scratch — you just check on it or restart it after a deploy.
 ssh deaton@<vps-ip>
 pm2 status                                              # is it online?
 pm2 logs deaton-outreach --lines 30                     # any recent errors?
-curl -s -o /dev/null -w "%{http_code}\n" \
-  https://unsub.deatonengineering.us/health             # expect 200
+curl -sS "https://unsub.deatonengineering.us/health"   # layered JSON: status, checks, deploy, safeMode
 ```
+
+`/health` returns **JSON** (not a bare `"ok"`). **`200`** usually; **`503`** when `status` is **`failed`** (e.g. Sheets or SMTP probe failed in production). Inspect `checks.googleSheets`, `checks.smtp`, `checks.scheduler`, and `deploy.sha`.
 
 ### Production `.env` invariants
 
@@ -105,10 +107,10 @@ PRODUCTION_GOOGLE_SPREADSHEET_ID=<the SAME REAL prod sheet ID>
 # DRY_RUN unset (or false)
 # TEST_RECIPIENT unset (or empty)
 SCHEDULER_ENABLED=true
+# SAFE_MODE=true   # optional: stops cron + Admin mutations; use while debugging (see OPERATIONS.md)
 ```
 
-Anything else and the app refuses to start. That is **on purpose** — it is the
-last line of defense against a test config leaking onto prod.
+When **`SAFE_MODE=true`**, the process **does not start cron**, and the **Admin API** rejects **POST/PATCH** (read-only **GET** still works). Unsubscribe and **`/health`** keep running.
 
 ### Stop / start / restart
 
@@ -124,55 +126,64 @@ Full runbook (troubleshooting, common tasks, emergency procedures):
 
 ---
 
-## 3) Push code from this repo to production
+## 3) Ship `main` to the VPS (semi-automatic)
 
-This is the standard "I changed something in `main`, get it onto the VPS" loop.
-It assumes the VPS already has the repo cloned in `/home/deaton/app` and a
-working `.env`.
+**Trunk:** work on **`feat/...`**, validate locally against a **test sheet**, merge to **`main`**, push. The **production VPS** should run **`main` only** (no separate `production` Git branch).
 
-### Step A — On your laptop (this repo)
+### Default path — GitHub Actions + manual approval
+
+1. **GitHub repository** → Settings → **Environments** → create **`production`** → enable **Required reviewers** (you / David).
+2. **Secrets** on the repo (or environment): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` (private half for deploy), **`DEPLOY_PATH`** (absolute app dir on the VPS, e.g. `/home/deaton/app`).
+3. Push to **`main`**: workflow **CI and Deploy** (`.github/workflows/ci-deploy.yml`) runs **`npm ci`**, **`npm run build`**, **`npm test`**.
+4. After tests pass, open the **deploy** job in the Actions UI and **approve** the **`production`** environment gate.
+5. The deploy job **SSHs** to the VPS and runs **`bash scripts/vps-deploy.sh`** from `DEPLOY_PATH`, which:
+   - **Preflight:** `package.json`, `credentials/service-account.json`, disk headroom, **`pm2 describe`** (set `SKIP_PM2_CHECK=1` once for first-time PM2 if needed).
+   - **Lock:** **`.deploy.lock`** + **`flock`** — a second overlapping deploy **exits immediately**.
+   - **`git pull origin main`**, **`npm install`**, **`npm run build`**, **`node scripts/write-deploy-manifest.mjs`** (writes `deploy-manifest.json` with **`GIT_SHA` / `GIT_REF` / `DEPLOYER`** from GitHub), **`pm2 reload deaton-outreach`**, **`curl` /health**.
+
+**Rollback:** revert `main` (or check out a known-good SHA), redeploy with the same script or manual steps → [`DEPLOYMENT.md` → Rollback Procedure](DEPLOYMENT.md#rollback-procedure).
+
+### Manual / emergency deploy (no Actions)
+
+On the laptop (after local checklist in `project/CONTRIBUTING.md`):
 
 ```bash
 git checkout main
-git pull origin main                       # sync with remote
-# (do your work, test locally per section 1)
-npm run build                              # confirm it compiles
-npm test                                   # confirm unit tests pass
-git add -A
-git commit -m "short description of change"
+git pull origin main
+npm run build
+npm test
 git push origin main
 ```
 
-### Step B — On the VPS (deploy)
+On the VPS:
 
 ```bash
 ssh deaton@<vps-ip>
-cd /home/deaton/app
-
-git pull origin main                       # pull the new commits
-npm install --production                   # only installs new deps if any
-npm run build                              # rebuild dist/ and admin SPA
-pm2 reload deaton-outreach                 # graceful restart, picks up new code
-pm2 logs deaton-outreach --lines 20        # eyeball the startup log
+cd /home/deaton/app   # or your DEPLOY_PATH
+export GIT_SHA="$(git rev-parse HEAD)"
+export GIT_REF="$(git rev-parse --abbrev-ref HEAD)"
+export DEPLOYER="$(whoami)"
+bash scripts/vps-deploy.sh
 ```
 
-### Step C — Verify
+Or follow the same commands as in `scripts/vps-deploy.sh` by hand, respecting **`.deploy.lock`**.
+
+### Verify after deploy
 
 ```bash
-pm2 status                                                       # online, low restart count
-curl -s -o /dev/null -w "%{http_code}\n" \
-  https://unsub.deatonengineering.us/health                      # 200
+pm2 status
+curl -sS "https://unsub.deatonengineering.us/health" | head -c 800
 ```
 
-Then open the Admin UI in a browser and confirm it loads. Watch the next
-send-cycle tick (within ~5 min) in `pm2 logs` and in the **Send Log** tab
-of the production sheet.
+Then open **Admin** (`/admin/`). **Env banners** (PRODUCTION, SAFE MODE, DRY RUN, etc.) pull from **`/health`** on the same origin.
 
-### If something is wrong — rollback
+---
 
-Reverting is just checking out the previous commit and rebuilding. Full
-procedure (with the exact commands) is in
-[`DEPLOYMENT.md` → Rollback Procedure](DEPLOYMENT.md#rollback-procedure).
+## Staging (recommended)
+
+Local + a test sheet cannot fully match **PM2 reload behavior, long-running cron, or Sheets timing**. When you are ready, add a **second VPS**, **staging spreadsheet**, **`APP_ENV=staging`**, **`DRY_RUN=true`**, **`SAFE_MODE=false`** so automation and scheduler **actually run** without delivering mail to real contacts. Use the **same deploy script** as production.
+
+**Future (canary):** deploy with automation **off** first (**`SAFE_MODE` or scheduler disabled**), validate **`/health`**, then enable the scheduler in a **second deliberate step** — avoids a bad release immediately hitting the whole contact base on `pm2 reload`.
 
 ---
 
@@ -192,7 +203,4 @@ procedure (with the exact commands) is in
   without sending mail.
 - **Always `pm2 reload` after a deploy, not `pm2 restart`.** `reload` is graceful
   (lets in-flight work finish); `restart` kills the process immediately.
-- **Caddy + the unsubscribe endpoint must stay up even when sending is paused.**
-  Old unsubscribe links in already-delivered mail still need to work. To pause
-  sending without dropping `/unsubscribe`, set every campaign's `active=FALSE`
-  in the Sheet instead of stopping PM2.
+- **`SAFE_MODE=true`** in production: **no cron**, **Admin** allows **GET only** (no POST/PATCH). Prefer this over killing PM2 or editing cron by hand. See [`OPERATIONS.md`](OPERATIONS.md).

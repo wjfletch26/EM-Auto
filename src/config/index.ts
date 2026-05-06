@@ -94,6 +94,7 @@ export function buildRawConfig() {
       dryRun: env.DRY_RUN,
       testRecipient: env.TEST_RECIPIENT,
       schedulerEnabled: env.SCHEDULER_ENABLED,
+      safeMode: env.SAFE_MODE,
     },
     admin: {
       apiKey: env.ADMIN_API_KEY,
@@ -151,6 +152,7 @@ export function getStartupEnvironmentSummary(): Record<string, unknown> {
   return {
     appEnv: config.app.appEnv,
     emailMode: config.app.emailMode,
+    safeMode: config.app.safeMode,
     schedulerEnabled: config.app.schedulerEnabled,
     activeSpreadsheetIdRedacted: redactSpreadsheetId(config.google.spreadsheetId),
   };
@@ -195,6 +197,7 @@ export function getRedactedConfig(): Record<string, unknown> {
       appEnv: config.app.appEnv,
       nodeEnv: config.app.nodeEnv,
       emailMode: config.app.emailMode,
+      safeMode: config.app.safeMode,
       dryRun: config.app.dryRun,
       testRecipient: config.app.testRecipient ? '***REDACTED***' : '(not set)',
       schedulerEnabled: config.app.schedulerEnabled,

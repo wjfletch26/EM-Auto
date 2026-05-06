@@ -256,6 +256,33 @@ export async function verifyConnection(): Promise<boolean> {
   }
 }
 
+const SMTP_HEALTH_TIMEOUT_MS = 8000;
+
+/**
+ * Bounded SMTP verify for /health — avoids hanging the health endpoint.
+ * Simulated-send mode skips real SMTP (returns true).
+ */
+export async function verifySmtpReachableForHealth(): Promise<boolean> {
+  if (config.app.emailMode === "simulated_send") {
+    return true;
+  }
+  try {
+    const t = getTransporter();
+    await Promise.race([
+      t.verify(),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("SMTP health check timeout")),
+          SMTP_HEALTH_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Closes the SMTP connection pool.
  * Called during graceful shutdown.

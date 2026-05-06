@@ -3,6 +3,7 @@
  * and actions to run send cycle, pipeline, and approval watcher.
  */
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import { config } from '../../../config/index.js';
 import { logger } from '../../../logging/logger.js';
 import * as sheets from '../../../services/sheets.js';
 import type {
@@ -102,6 +103,22 @@ function asyncHandler(
 
 export function createAdminRouter(): Router {
   const r = Router();
+
+  // SAFE_MODE: inspection (GET) only — no sheet mutations or automation triggers.
+  r.use((req, res, next) => {
+    if (req.method === 'GET') {
+      next();
+      return;
+    }
+    if (config.app.safeMode) {
+      res.status(503).json({
+        error:
+          'SAFE_MODE is enabled: POST/PATCH and automation actions are disabled. Use GET for inspection only.',
+      });
+      return;
+    }
+    next();
+  });
 
   r.get(
     '/contacts',

@@ -71,7 +71,29 @@ At startup, the app logs an **email mode** string: `simulated_send`, `test_recip
 | --------------------- | ------- | -------- | ----------- |
 | `SCHEDULER_ENABLED`   | boolean | No       | **Default:** `true` when `APP_ENV=production`, **`false` when `APP_ENV` is `local` or `staging`.** Set to `true` explicitly to run background crons on a dev machine. |
 
-When the scheduler is off, the process still runs the web server and you can use the **admin API or `/admin` UI** to run send cycle, pipeline, and approval watcher manually.
+When the scheduler is off, the process still runs the web server and you can use the **admin API or `/admin` UI** to run send cycle, pipeline, and approval watcher manually — unless **`SAFE_MODE=true`**, which blocks **POST/PATCH** (see below).
+
+---
+
+## SAFE_MODE (production debugging)
+
+| Variable      | Type    | Required | Description |
+| ------------- | ------- | -------- | ----------- |
+| `SAFE_MODE`   | boolean | No       | Default `false`. When **`true`**: **cron is not started** (same effect as forcing scheduler off), and **Admin API** rejects **non-GET** requests so sheets are not mutated and automation is not triggered from the UI. **`/health`**, **unsubscribe**, and **read-only Admin inspection** still work. |
+
+Use this instead of stopping PM2 or editing live cron when you need a stable HTTP surface while investigating issues.
+
+---
+
+## Deploy metadata (optional, VPS)
+
+Written by **`scripts/write-deploy-manifest.mjs`** during **`scripts/vps-deploy.sh`** (or CI deploy). Read at startup for logs and exposed on **`/health`** under **`deploy`**.
+
+| Variable | Type | Required | Description |
+| -------- | ---- | -------- | ----------- |
+| `DEPLOY_MANIFEST_PATH` | string | No | Relative or absolute path to manifest JSON. Default: **`deploy-manifest.json`** at project root. |
+
+Manifest fields (typical): `sha`, `branch`, `time`, `deployer`, `appEnv`, `deploymentStatus` (`healthy`, `rollback`, etc.). See `scripts/write-deploy-manifest.mjs`.
 
 ---
 

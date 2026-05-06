@@ -47,8 +47,18 @@ async function main(): Promise<void> {
   try {
     console.log('1) Checking /health...');
     const healthBody = await expectStatus('/health', 200);
-    if (!healthBody.includes('"status":"ok"')) {
-      throw new Error(`/health response did not include status ok: ${healthBody}`);
+    const healthJson = JSON.parse(healthBody) as { status?: string };
+    const okStates = new Set([
+      'healthy',
+      'degraded',
+      'safe_mode',
+      'deploying',
+      'rollback',
+    ]);
+    if (!healthJson.status || !okStates.has(healthJson.status)) {
+      throw new Error(
+        `/health unexpected status ${String(healthJson.status)}: ${healthBody.slice(0, 500)}`,
+      );
     }
 
     console.log('2) Checking invalid token response...');

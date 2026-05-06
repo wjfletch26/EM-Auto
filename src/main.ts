@@ -22,6 +22,7 @@ import { logger, cleanOldLogs } from "./logging/logger.js";
 import { verifyConnection, disconnect } from "./services/smtp.js";
 import { startWebServer } from "./web/server.js";
 import { startScheduler, type SchedulerHandle } from "./scheduler/cron.js";
+import { loadDeployManifest } from "./ops/deploy-info.js";
 
 let server: Server | null = null;
 let scheduler: SchedulerHandle | null = null;
@@ -55,6 +56,15 @@ export async function startApplication(): Promise<void> {
     "Configuration loaded",
   );
 
+  const manifest = loadDeployManifest();
+  logger.info(
+    {
+      module: "main",
+      deployManifest: manifest ?? "not present (optional deploy-manifest.json)",
+    },
+    "Deployment metadata",
+  );
+
   const smtpOk = await verifyConnection();
   if (!smtpOk) {
     throw new Error("Startup aborted: SMTP verification failed");
@@ -69,6 +79,7 @@ export async function startApplication(): Promise<void> {
         module: "main",
         scheduler: "started",
         schedulerEnabled: true,
+        safeMode: config.app.safeMode,
       },
       "Scheduler started",
     );
@@ -78,9 +89,10 @@ export async function startApplication(): Promise<void> {
         module: "main",
         scheduler: "skipped",
         schedulerEnabled: false,
+        safeMode: config.app.safeMode,
         appEnv: config.app.appEnv,
       },
-      "Scheduler disabled (manual/admin triggers only)",
+      "Scheduler disabled (SAFE_MODE, manual triggers, or non-production default)",
     );
   }
 

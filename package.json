@@ -27,7 +27,8 @@
     "sheets:format": "tsx scripts/format-spreadsheet.ts",
     "review:regenerate-email": "tsx scripts/regenerate-review-queue-email.ts",
     "sheets:migrate-dave-notes": "tsx scripts/migrate-review-queue-dave-notes.ts",
-    "sheets:migrate-qc-regen-state": "tsx scripts/migrate-qc-regen-state.ts"
+    "sheets:migrate-qc-regen-state": "tsx scripts/migrate-qc-regen-state.ts",
+    "deploy:write-manifest": "node scripts/write-deploy-manifest.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

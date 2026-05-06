@@ -40,10 +40,10 @@ pm2 restart deaton-outreach            # Restart it
 ### Is the unsubscribe endpoint reachable?
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" https://unsub.deatonengineering.us/health
+curl -sS "https://unsub.deatonengineering.us/health"
 ```
 
-Expected: `200`. If not: check Caddy status (`sudo systemctl status caddy`).
+Expect **`200`** with JSON: `status` (`healthy`, `safe_mode`, `degraded`, `failed`, …), `checks` (`googleSheets`, `smtp`, `scheduler`), and `deploy` (git `sha`, `deployer`, …). **`503`** when `status` is **`failed`** (critical checks).
 
 ### Admin UI and API (optional)
 
@@ -52,7 +52,9 @@ When `ADMIN_API_KEY` is set in `.env` and the app was built with `npm run build`
 - **Browser**: open `https://<your-public-host>/admin/` (same host you use for unsubscribe, e.g. `UNSUB_BASE_URL` without a trailing path). The server redirects `/` to `/admin/` when the admin UI is enabled.
 - **JSON API**: all routes are under `/api/admin/`. Authenticate with `Authorization: Bearer <ADMIN_API_KEY>` or `X-Admin-Key: <ADMIN_API_KEY>`.
 
-From the UI or API you can list and edit Sheets-backed contacts, company intelligence, and the review queue, and run **send cycle**, **pipeline cycle**, and **approval watcher** on demand. This is the primary way to drive those jobs when `SCHEDULER_ENABLED` is false (typical local/staging default).
+From the UI or API you can list and edit Sheets-backed contacts, company intelligence, and the review queue, and run **send cycle**, **pipeline cycle**, and **approval watcher** on demand — except when **`SAFE_MODE=true`** (then only **GET** requests are allowed; use read-only inspection until you disable safe mode).
+
+This is the primary way to drive those jobs when `SCHEDULER_ENABLED` is false (typical local/staging default).
 
 If `ADMIN_API_KEY` is unset, `/api/admin/*` returns **503** and the SPA is not served—by design.
 
@@ -66,6 +68,20 @@ Alternatively, check application logs:
 ```bash
 pm2 logs deaton-outreach --lines 50 | grep "Send cycle complete"
 ```
+
+---
+
+## SAFE_MODE (break-glass debugging)
+
+When production misbehaves, prefer **`SAFE_MODE=true`** over **`pm2 stop`** or ripping out cron:
+
+1. On the VPS, set **`SAFE_MODE=true`** in `.env` (or `.env.production`).
+2. **`pm2 reload deaton-outreach`**
+3. Confirm **`/health`** shows **`status: "safe_mode"`** and **`safeMode: true`**.
+4. Use **Admin GET** and **`/health`** to inspect; **POST/PATCH** and **cron** stay off.
+5. Fix root cause; set **`SAFE_MODE=false`** (or unset); **`pm2 reload`** again.
+
+Unsubscribe links keep working; do not rely on **`pm2 stop`** for investigations unless the process itself is dangerous.
 
 ---
 

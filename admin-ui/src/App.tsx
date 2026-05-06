@@ -3,6 +3,108 @@ import { adminFetch, getStoredApiKey, setStoredApiKey } from './api';
 
 type Tab = 'contacts' | 'intel' | 'review' | 'actions';
 
+/** Subset of GET /health for operator banners (no auth). */
+type HealthPreview = {
+  status: string;
+  appEnv: string;
+  safeMode: boolean;
+  dryRun: boolean;
+  emailMode: string;
+  deploy?: { sha?: string; branch?: string };
+};
+
+function EnvBannerBar({
+  health,
+  healthError,
+}: {
+  health: HealthPreview | null;
+  healthError: string | null;
+}): JSX.Element {
+  if (healthError) {
+    return (
+      <div className="env-banner-bar" role="status">
+        <span className="env-chip env-chip-warn">HEALTH: {healthError}</span>
+      </div>
+    );
+  }
+  if (!health) {
+    return (
+      <div className="env-banner-bar" role="status">
+        <span className="env-chip env-chip-muted">
+          Environment: open /health (start backend) to show PRODUCTION / SAFE MODE / DRY RUN flags
+        </span>
+      </div>
+    );
+  }
+
+  const chips: JSX.Element[] = [];
+  if (health.appEnv === 'production') {
+    chips.push(
+      <span key="prod" className="env-chip env-chip-production">
+        PRODUCTION
+      </span>,
+    );
+  } else if (health.appEnv === 'staging') {
+    chips.push(
+      <span key="stg" className="env-chip env-chip-staging">
+        STAGING
+      </span>,
+    );
+  } else {
+    chips.push(
+      <span key="loc" className="env-chip env-chip-local">
+        LOCAL
+      </span>,
+    );
+  }
+
+  if (health.safeMode) {
+    chips.push(
+      <span key="safe" className="env-chip env-chip-safe">
+        SAFE MODE
+      </span>,
+    );
+  }
+  if (health.dryRun || health.emailMode === 'simulated_send') {
+    chips.push(
+      <span key="dry" className="env-chip env-chip-dry">
+        DRY RUN
+      </span>,
+    );
+  }
+  if (health.emailMode === 'test_recipient' && health.appEnv !== 'production') {
+    chips.push(
+      <span key="tr" className="env-chip env-chip-testrecv">
+        TEST RECIPIENT
+      </span>,
+    );
+  }
+  if (health.emailMode === 'production_live') {
+    chips.push(
+      <span key="live" className="env-chip env-chip-live">
+        LIVE MAIL
+      </span>,
+    );
+  }
+
+  const sha = health.deploy?.sha?.slice(0, 7);
+  if (sha) {
+    chips.push(
+      <span key="sha" className="env-chip env-chip-muted">
+        SHA {sha}
+      </span>,
+    );
+  }
+
+  chips.push(
+    <span key="st" className="env-chip env-chip-muted">
+      {health.status}
+    </span>,
+  );
+
+  return <div className="env-banner-bar">{chips}</div>;
+}
+
 /** Contact row shape from GET /contacts (mirrors backend). */
 type ContactRow = Record<string, unknown> & { email: string; _rowIndex: number };
 
@@ -56,6 +158,34 @@ export function App(): JSX.Element {
   const [importJson, setImportJson] = useState('[\n  { "email": "a@b.com", "firstName": "Ann" }\n]');
   /** Client-side filter on Sequence actions tab (matches email, name, or company). */
   const [sequenceFilterEmail, setSequenceFilterEmail] = useState('');
+
+  const [healthPreview, setHealthPreview] = useState<HealthPreview | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/health')
+      .then(async (r) => {
+        const text = await r.text();
+        if (!r.ok) throw new Error(`${r.status} ${text.slice(0, 160)}`);
+        return JSON.parse(text) as HealthPreview;
+      })
+      .then((h) => {
+        if (!cancelled) {
+          setHealthPreview(h);
+          setHealthError(null);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setHealthPreview(null);
+          setHealthError(e instanceof Error ? e.message : String(e));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const showMsg = useCallback((type: 'ok' | 'err', text: string) => {
     setMessage({ type, text });
@@ -360,6 +490,8 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <h1>Deaton Outreach — Admin</h1>
+
+      <EnvBannerBar health={healthPreview} healthError={healthError} />
 
       <div className="toolbar">
         <label>
