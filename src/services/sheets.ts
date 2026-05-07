@@ -99,6 +99,50 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
   throw new Error('withRetry: unreachable');
 }
 
+/**
+ * Google returns the exact worksheet title; A1 ranges must use that string.
+ * UI can show NBSP (U+00A0) like a normal space — hard-coded "'Company Profiles'!…" then fails
+ * with "Unable to parse range" while other tabs still work.
+ */
+const sheetTitleCache = new Map<string, string>();
+
+function normalizeSheetTabName(title: string): string {
+  return title
+    .normalize('NFKC')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function a1QuoteSheetName(title: string): string {
+  return `'${title.replace(/'/g, "''")}'`;
+}
+
+async function resolveSheetTabTitle(canonicalTitle: string): Promise<string> {
+  const key = normalizeSheetTabName(canonicalTitle);
+  const cached = sheetTitleCache.get(key);
+  if (cached) return cached;
+
+  const client = await getClient();
+  const res = await withRetry(() =>
+    client.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID,
+      fields: 'sheets.properties.title',
+    }),
+  );
+
+  const titles =
+    res.data.sheets?.map((s) => s.properties?.title).filter((t): t is string => Boolean(t)) ?? [];
+
+  const hit = titles.find((t) => normalizeSheetTabName(t) === key);
+  if (!hit) {
+    throw new Error(`No sheet tab matching "${canonicalTitle}". Found: ${titles.join(', ')}`);
+  }
+
+  sheetTitleCache.set(key, hit);
+  return hit;
+}
+
 /** Converts values for RAW Sheets writes (booleans → TRUE/FALSE). */
 function toSheetCell(value: unknown): string | number {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
@@ -594,10 +638,12 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
 /** Reads company-level research rows (one per canonical URL). */
 export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   const sheets = await getClient();
+  const tab = await resolveSheetTabTitle('Company Profiles');
+  const range = `${a1QuoteSheetName(tab)}!A2:Q`;
   const res = await withRetry(() =>
     sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Company Profiles'!A2:Q",
+      range,
     }),
   );
 
@@ -642,10 +688,12 @@ export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
 /** Appends a new Company Profiles row after successful research bootstrap. */
 export async function appendCompanyProfile(entry: Omit<StoredCompanyProfile, '_rowIndex'>): Promise<void> {
   const sheets = await getClient();
+  const tab = await resolveSheetTabTitle('Company Profiles');
+  const range = `${a1QuoteSheetName(tab)}!A:Q`;
   await withRetry(() =>
     sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "'Company Profiles'!A:Q",
+      range,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
@@ -684,6 +732,8 @@ export async function updateCompanyProfileRow(
   updates: Partial<Omit<StoredCompanyProfile, '_rowIndex' | 'canonicalCompanyUrl'>>,
 ): Promise<void> {
   const sheets = await getClient();
+  const tab = await resolveSheetTabTitle('Company Profiles');
+  const a1Tab = a1QuoteSheetName(tab);
   const data: sheets_v4.Schema$ValueRange[] = [];
 
   for (const [field, value] of Object.entries(updates)) {
@@ -691,7 +741,7 @@ export async function updateCompanyProfileRow(
       COMPANY_PROFILE_FIELD_TO_COLUMN[field as keyof Omit<StoredCompanyProfile, '_rowIndex'>];
     if (!col) continue;
     data.push({
-      range: `'Company Profiles'!${col}${rowIndex}`,
+      range: `${a1Tab}!${col}${rowIndex}`,
       values: [[value ?? '']],
     });
   }
