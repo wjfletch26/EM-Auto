@@ -71,8 +71,11 @@ export function startWebServer(port = config.unsub.port): Server {
       next();
       return;
     }
-    const rel = req.url.split('?')[0].split('#')[0];
-    if (rel === '/' || rel === '') {
+    // Use originalUrl: inside a mount, some Express versions leave req.url in an awkward shape;
+    // we only need to detect the HTML entry points (not /dashboard/app.js, etc.).
+    const pathOnly = req.originalUrl.split('?')[0].split('#')[0];
+    const trimmed = pathOnly.replace(/\/+$/, '') || '/';
+    if (trimmed === '/dashboard') {
       res.sendFile(dashboardIndex);
       return;
     }
