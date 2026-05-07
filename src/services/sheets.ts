@@ -132,19 +132,31 @@ async function resolveSheetTabMeta(canonicalTitle: string): Promise<SheetTabCach
     }),
   );
 
+  // Two different exact titles (e.g. NBSP vs space) can normalize the same — pick would be arbitrary and breaks reads.
+  const matches: SheetTabCacheEntry[] = [];
   for (const s of res.data.sheets ?? []) {
     const title = s.properties?.title ?? '';
     const sheetId = s.properties?.sheetId;
     if (sheetId === undefined || sheetId === null) continue;
     if (normalizeSheetTabName(title) !== key) continue;
-    const entry: SheetTabCacheEntry = { exactTitle: title, sheetId };
-    sheetTabCache.set(key, entry);
-    return entry;
+    matches.push({ exactTitle: title, sheetId });
   }
 
-  const titles =
-    res.data.sheets?.map((s) => s.properties?.title).filter((t): t is string => Boolean(t)) ?? [];
-  throw new Error(`No sheet tab matching "${canonicalTitle}". Found: ${titles.join(', ')}`);
+  if (matches.length === 0) {
+    const titles =
+      res.data.sheets?.map((s) => s.properties?.title).filter((t): t is string => Boolean(t)) ?? [];
+    throw new Error(`No sheet tab matching "${canonicalTitle}". Found: ${titles.join(', ')}`);
+  }
+  if (matches.length > 1) {
+    const exact = matches.map((m) => JSON.stringify(m.exactTitle)).join(', ');
+    throw new Error(
+      `Multiple tabs normalize to "${canonicalTitle}" (${matches.length} matches: ${exact}). Rename so only one matches.`,
+    );
+  }
+
+  const entry = matches[0]!;
+  sheetTabCache.set(key, entry);
+  return entry;
 }
 
 async function resolveSheetTabTitle(canonicalTitle: string): Promise<string> {
@@ -644,33 +656,12 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
 
 // ─── Company Profiles Tab ─────────────────────────────────────────────────────
 
-/** Reads company-level research rows (one per canonical URL). */
-export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
-  const sheets = await getClient();
-  const { sheetId } = await resolveSheetTabMeta('Company Profiles');
-
-  const res = await withRetry(() =>
-    sheets.spreadsheets.values.batchGetByDataFilter({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: {
-        dataFilters: [
-          {
-            gridRange: {
-              sheetId,
-              startRowIndex: 1,
-              endRowIndex: 100_000,
-              startColumnIndex: 0,
-              endColumnIndex: 17,
-            },
-          },
-        ],
-        majorDimension: 'ROWS',
-      },
-    }),
-  );
-
-  const rows = res.data.valueRanges?.[0]?.valueRange?.values ?? [];
-  const result = rows.map((row, i) => ({
+/**
+ * Turns raw Company Profiles rows (columns A–Q, from row 2 upward) into typed records.
+ * Shared by grid-based and A1-based reads.
+ */
+function mapCompanyProfileRows(rows: (string | undefined)[][]): StoredCompanyProfile[] {
+  return rows.map((row, i) => ({
     canonicalCompanyUrl: row[0]?.trim() || '',
     companyUrl: row[1] || '',
     companyName: row[2] || '',
@@ -690,6 +681,50 @@ export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
     errorLog: row[16] || '',
     _rowIndex: i + 2,
   }));
+}
+
+/** Reads company-level research rows (one per canonical URL). */
+export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
+  const sheets = await getClient();
+  const { sheetId, exactTitle } = await resolveSheetTabMeta('Company Profiles');
+
+  // Prefer sheetId + gridRange (no A1 parsing). Omit endRowIndex so the range extends through populated rows.
+  // Some spreadsheets reject very large endRowIndex; if the API still errors, fall back to values.get with the exact tab title.
+  let rows: (string | undefined)[][] = [];
+  try {
+    const res = await withRetry(() =>
+      sheets.spreadsheets.values.batchGetByDataFilter({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          dataFilters: [
+            {
+              gridRange: {
+                sheetId,
+                startRowIndex: 1, // Skip header row (0-based; row 2 in UI = index 1)
+                startColumnIndex: 0,
+                endColumnIndex: 17, // Exclusive: cols A–Q
+              },
+            },
+          ],
+          majorDimension: 'ROWS',
+        },
+      }),
+    );
+    rows = (res.data.valueRanges?.[0]?.valueRange?.values ?? []) as (string | undefined)[][];
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { module: 'sheets', event: 'company_profiles_grid_read_failed', detail },
+      'batchGetByDataFilter failed; falling back to values.get with resolved tab title',
+    );
+    const range = `${a1QuoteSheetName(exactTitle)}!A2:Q`;
+    const res = await withRetry(() =>
+      sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range }),
+    );
+    rows = (res.data.values ?? []) as (string | undefined)[][];
+  }
+
+  const result = mapCompanyProfileRows(rows);
 
   const duplicateKeys = findDuplicateCompanyProfileKeys(result);
   for (const d of duplicateKeys) {
