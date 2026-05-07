@@ -58,23 +58,26 @@ export function startWebServer(port = config.unsub.port): Server {
   // correct `public/dashboard` is used even when `process.cwd()` is not the repo root (PM2).
   const webDir = path.dirname(fileURLToPath(import.meta.url));
   const dashboardDir = path.resolve(webDir, '..', '..', 'public', 'dashboard');
-  const dashboardIndex = path.join(dashboardDir, 'index.html');
-
-  const sendDashboardIndex: RequestHandler = (_req, res) => {
-    res.sendFile(dashboardIndex);
-  };
+  const dashboardIndex = path.resolve(dashboardDir, 'index.html');
+  /** One mounted stack: index for `/` or bare mount, then static for `/app.js`, etc. Fixes Express 5 router ordering where `/dashboard` prefix middleware could answer before an exact `app.get`. */
+  const dashboardStaticMw = express.static(dashboardDir, { index: false, redirect: false });
 
   // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());
-  // Dashboard: serve `index.html` without 301/308 redirects (avoids nginx + curl -L loops and
-  // ambiguous trailing-slash behavior). Static assets live under `/dashboard/*.js`, etc.
-  app.get(['/dashboard', '/dashboard/'], sendDashboardIndex);
-  app.use(
-    '/dashboard',
-    express.static(dashboardDir, { index: false, redirect: false }),
-  );
+  app.use('/dashboard', (req, res, next): void => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      next();
+      return;
+    }
+    const rel = req.url.split('?')[0].split('#')[0];
+    if (rel === '/' || rel === '') {
+      res.sendFile(dashboardIndex);
+      return;
+    }
+    dashboardStaticMw(req, res, next);
+  });
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
