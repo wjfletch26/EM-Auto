@@ -61,11 +61,10 @@ export function startWebServer(port = config.unsub.port): Server {
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());
-  // Bare `/dashboard` does not always resolve to `index.html` with every static middleware + proxy combo; force the directory URL.
-  app.get('/dashboard', (_req, res) => {
-    res.redirect(308, '/dashboard/');
-  });
-  app.use('/dashboard/', express.static(dashboardDir, { index: 'index.html' }));
+  // Operator dashboard HTML/JS/CSS — mount once at `/dashboard` so both `/dashboard` and
+  // `/dashboard/` resolve without a redirect ping-pong (Express 5 strict vs trailing slash +
+  // a separate redirect caused endless 308 loops with curl -L and some clients).
+  app.use('/dashboard', express.static(dashboardDir, { index: 'index.html' }));
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
