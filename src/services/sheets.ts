@@ -119,6 +119,44 @@ function a1QuoteSheetName(title: string): string {
   return `'${title.replace(/'/g, "''")}'`;
 }
 
+/**
+ * Best-effort detail string for Google API errors (message + JSON body when present).
+ * Axios/gaxios often nests the Sheets error under `response.data`.
+ */
+function sheetsApiErrorDetail(err: unknown): string {
+  if (!err || typeof err !== 'object') return String(err);
+  const e = err as { message?: string; response?: { data?: unknown } };
+  const base = typeof e.message === 'string' ? e.message : String(err);
+  const data = e.response?.data;
+  if (data === undefined || data === null) return base;
+  try {
+    return `${base} | ${JSON.stringify(data)}`;
+  } catch {
+    return `${base} | [unserializable response.data]`;
+  }
+}
+
+/**
+ * Fetches the sheet grid row count for a tab (used as exclusive endRowIndex for value reads).
+ * Keeps batch reads within the actual grid; some spreadsheets reject/open-ended GridRanges oddly.
+ */
+async function getSheetRowCountForSheetId(sheetId: number): Promise<number | undefined> {
+  const client = await getClient();
+  const res = await withRetry(() =>
+    client.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID,
+      fields: 'sheets.properties(sheetId,gridProperties(rowCount))',
+    }),
+  );
+  for (const s of res.data.sheets ?? []) {
+    const id = s.properties?.sheetId;
+    if (id == null || Number(id) !== Number(sheetId)) continue;
+    const rowCount = s.properties?.gridProperties?.rowCount;
+    return rowCount ?? undefined;
+  }
+  return undefined;
+}
+
 async function resolveSheetTabMeta(canonicalTitle: string): Promise<SheetTabCacheEntry> {
   const key = normalizeSheetTabName(canonicalTitle);
   const cached = sheetTabCache.get(key);
@@ -687,41 +725,65 @@ function mapCompanyProfileRows(rows: (string | undefined)[][]): StoredCompanyPro
 export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   const sheets = await getClient();
   const { sheetId, exactTitle } = await resolveSheetTabMeta('Company Profiles');
+  // Use the live grid size as an exclusive endRowIndex. We have seen APIs report "Unable to parse range … A2:Q"
+  // when the gridRange end row is omitted or unrealistically large for a given spreadsheet.
+  const gridRowCount = await getSheetRowCountForSheetId(sheetId);
+  const gridRange: sheets_v4.Schema$GridRange =
+    gridRowCount != null && gridRowCount <= 1
+      ? {
+          sheetId,
+          startRowIndex: 1,
+          endRowIndex: 1,
+          startColumnIndex: 0,
+          endColumnIndex: 17,
+        }
+      : gridRowCount != null
+        ? {
+            sheetId,
+            startRowIndex: 1,
+            endRowIndex: gridRowCount,
+            startColumnIndex: 0,
+            endColumnIndex: 17,
+          }
+        : {
+            sheetId,
+            startRowIndex: 1,
+            startColumnIndex: 0,
+            endColumnIndex: 17,
+          };
 
-  // Prefer sheetId + gridRange (no A1 parsing). Omit endRowIndex so the range extends through populated rows.
-  // Some spreadsheets reject very large endRowIndex; if the API still errors, fall back to values.get with the exact tab title.
+  // Prefer sheetId + gridRange for reads (no A1). If that fails, fall back to values.get using the API tab title.
   let rows: (string | undefined)[][] = [];
+  let gridErrText = '';
   try {
     const res = await withRetry(() =>
       sheets.spreadsheets.values.batchGetByDataFilter({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: {
-          dataFilters: [
-            {
-              gridRange: {
-                sheetId,
-                startRowIndex: 1, // Skip header row (0-based; row 2 in UI = index 1)
-                startColumnIndex: 0,
-                endColumnIndex: 17, // Exclusive: cols A–Q
-              },
-            },
-          ],
+          dataFilters: [{ gridRange }],
           majorDimension: 'ROWS',
         },
       }),
     );
     rows = (res.data.valueRanges?.[0]?.valueRange?.values ?? []) as (string | undefined)[][];
   } catch (err: unknown) {
-    const detail = err instanceof Error ? err.message : String(err);
+    gridErrText = sheetsApiErrorDetail(err);
     logger.warn(
-      { module: 'sheets', event: 'company_profiles_grid_read_failed', detail },
+      { module: 'sheets', event: 'company_profiles_grid_read_failed', detail: gridErrText, sheetId, gridRowCount },
       'batchGetByDataFilter failed; falling back to values.get with resolved tab title',
     );
     const range = `${a1QuoteSheetName(exactTitle)}!A2:Q`;
-    const res = await withRetry(() =>
-      sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range }),
-    );
-    rows = (res.data.values ?? []) as (string | undefined)[][];
+    try {
+      const res = await withRetry(() =>
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range }),
+      );
+      rows = (res.data.values ?? []) as (string | undefined)[][];
+    } catch (fallbackErr: unknown) {
+      const fallbackText = sheetsApiErrorDetail(fallbackErr);
+      throw new Error(
+        `Company Profiles read failed (batchGetByDataFilter: ${gridErrText}; values.get ${range}: ${fallbackText}).`,
+      );
+    }
   }
 
   const result = mapCompanyProfileRows(rows);
