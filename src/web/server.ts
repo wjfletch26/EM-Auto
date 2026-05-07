@@ -56,15 +56,21 @@ export function startWebServer(port = config.unsub.port): Server {
 
   const publicRoot = path.join(process.cwd(), 'public');
   const dashboardDir = path.join(publicRoot, 'dashboard');
+  const dashboardIndex = path.join(dashboardDir, 'index.html');
 
   // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());
-  // Operator dashboard HTML/JS/CSS — mount once at `/dashboard` so both `/dashboard` and
-  // `/dashboard/` resolve without a redirect ping-pong (Express 5 strict vs trailing slash +
-  // a separate redirect caused endless 308 loops with curl -L and some clients).
-  app.use('/dashboard', express.static(dashboardDir, { index: 'index.html' }));
+  // Dashboard: serve `index.html` without 301/308 redirects (avoids nginx + curl -L loops and
+  // ambiguous trailing-slash behavior). Static assets live under `/dashboard/*.js`, etc.
+  app.get(/^\/dashboard\/?$/i, (_req, res) => {
+    res.sendFile(dashboardIndex);
+  });
+  app.use(
+    '/dashboard',
+    express.static(dashboardDir, { index: false, redirect: false }),
+  );
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
