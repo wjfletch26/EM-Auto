@@ -100,11 +100,12 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 }
 
 /**
- * Google returns the exact worksheet title; A1 ranges must use that string.
- * UI can show NBSP (U+00A0) like a normal space — hard-coded "'Company Profiles'!…" then fails
- * with "Unable to parse range" while other tabs still work.
+ * Google returns exact worksheet titles and numeric sheetIds. A1 ranges can fail to parse even when
+ * metadata lists the tab (rare API/title edge cases); sheetId + gridRange avoids A1 for reads.
  */
-const sheetTitleCache = new Map<string, string>();
+type SheetTabCacheEntry = { exactTitle: string; sheetId: number };
+
+const sheetTabCache = new Map<string, SheetTabCacheEntry>();
 
 function normalizeSheetTabName(title: string): string {
   return title
@@ -118,29 +119,37 @@ function a1QuoteSheetName(title: string): string {
   return `'${title.replace(/'/g, "''")}'`;
 }
 
-async function resolveSheetTabTitle(canonicalTitle: string): Promise<string> {
+async function resolveSheetTabMeta(canonicalTitle: string): Promise<SheetTabCacheEntry> {
   const key = normalizeSheetTabName(canonicalTitle);
-  const cached = sheetTitleCache.get(key);
+  const cached = sheetTabCache.get(key);
   if (cached) return cached;
 
   const client = await getClient();
   const res = await withRetry(() =>
     client.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
-      fields: 'sheets.properties.title',
+      fields: 'sheets.properties(sheetId,title)',
     }),
   );
 
-  const titles =
-    res.data.sheets?.map((s) => s.properties?.title).filter((t): t is string => Boolean(t)) ?? [];
-
-  const hit = titles.find((t) => normalizeSheetTabName(t) === key);
-  if (!hit) {
-    throw new Error(`No sheet tab matching "${canonicalTitle}". Found: ${titles.join(', ')}`);
+  for (const s of res.data.sheets ?? []) {
+    const title = s.properties?.title ?? '';
+    const sheetId = s.properties?.sheetId;
+    if (sheetId === undefined || sheetId === null) continue;
+    if (normalizeSheetTabName(title) !== key) continue;
+    const entry: SheetTabCacheEntry = { exactTitle: title, sheetId };
+    sheetTabCache.set(key, entry);
+    return entry;
   }
 
-  sheetTitleCache.set(key, hit);
-  return hit;
+  const titles =
+    res.data.sheets?.map((s) => s.properties?.title).filter((t): t is string => Boolean(t)) ?? [];
+  throw new Error(`No sheet tab matching "${canonicalTitle}". Found: ${titles.join(', ')}`);
+}
+
+async function resolveSheetTabTitle(canonicalTitle: string): Promise<string> {
+  const { exactTitle } = await resolveSheetTabMeta(canonicalTitle);
+  return exactTitle;
 }
 
 /** Converts values for RAW Sheets writes (booleans → TRUE/FALSE). */
@@ -638,16 +647,29 @@ export async function appendReplyLog(entry: ReplyLogEntry): Promise<void> {
 /** Reads company-level research rows (one per canonical URL). */
 export async function getCompanyProfiles(): Promise<StoredCompanyProfile[]> {
   const sheets = await getClient();
-  const tab = await resolveSheetTabTitle('Company Profiles');
-  const range = `${a1QuoteSheetName(tab)}!A2:Q`;
+  const { sheetId } = await resolveSheetTabMeta('Company Profiles');
+
   const res = await withRetry(() =>
-    sheets.spreadsheets.values.get({
+    sheets.spreadsheets.values.batchGetByDataFilter({
       spreadsheetId: SPREADSHEET_ID,
-      range,
+      requestBody: {
+        dataFilters: [
+          {
+            gridRange: {
+              sheetId,
+              startRowIndex: 1,
+              endRowIndex: 100_000,
+              startColumnIndex: 0,
+              endColumnIndex: 17,
+            },
+          },
+        ],
+        majorDimension: 'ROWS',
+      },
     }),
   );
 
-  const rows = res.data.values || [];
+  const rows = res.data.valueRanges?.[0]?.valueRange?.values ?? [];
   const result = rows.map((row, i) => ({
     canonicalCompanyUrl: row[0]?.trim() || '',
     companyUrl: row[1] || '',
