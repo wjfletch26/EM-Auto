@@ -59,28 +59,24 @@ export function startWebServer(port = config.unsub.port): Server {
   const webDir = path.dirname(fileURLToPath(import.meta.url));
   const dashboardDir = path.resolve(webDir, '..', '..', 'public', 'dashboard');
   const dashboardIndex = path.resolve(dashboardDir, 'index.html');
-  /** One mounted stack: index for `/` or bare mount, then static for `/app.js`, etc. Fixes Express 5 router ordering where `/dashboard` prefix middleware could answer before an exact `app.get`. */
-  const dashboardStaticMw = express.static(dashboardDir, { index: false, redirect: false });
+  const sendDashboardIndex: RequestHandler = (_req, res) => {
+    res.sendFile(dashboardIndex);
+  };
 
   // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
   app.get('/unsubscribe', unsubscribeRateLimiter, unsubscribeHandler);
   app.use('/api/dashboard', createDashboardRouter());
-  app.use('/dashboard', (req, res, next): void => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      next();
-      return;
-    }
-    // Use originalUrl: inside a mount, some Express versions leave req.url in an awkward shape;
-    // we only need to detect the HTML entry points (not /dashboard/app.js, etc.).
-    const pathOnly = req.originalUrl.split('?')[0].split('#')[0];
-    const trimmed = pathOnly.replace(/\/+$/, '') || '/';
-    if (trimmed === '/dashboard') {
-      res.sendFile(dashboardIndex);
-      return;
-    }
-    dashboardStaticMw(req, res, next);
-  });
+  // Dashboard HTML entry — register BOTH exact paths before any static mount so no router or
+  // serve-static slash logic can ever turn `/dashboard/` into a redirect (we have seen Express 5
+  // + serve-static loop on that exact URL even with `redirect: false`).
+  app.get('/dashboard', sendDashboardIndex);
+  app.get('/dashboard/', sendDashboardIndex);
+  // Static assets like `/dashboard/app.js`, `/dashboard/style.css`, etc.
+  app.use(
+    '/dashboard',
+    express.static(dashboardDir, { index: false, redirect: false }),
+  );
 
   app.use('/api/admin', express.json({ limit: '10mb' }), requireAdminApiKey, createAdminRouter());
 
