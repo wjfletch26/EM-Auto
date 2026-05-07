@@ -54,9 +54,15 @@ export function startWebServer(port = config.unsub.port): Server {
   const app = express();
   const unsubscribeRateLimiter = createRateLimiterMiddleware();
 
-  const publicRoot = path.join(process.cwd(), 'public');
-  const dashboardDir = path.join(publicRoot, 'dashboard');
+  // Dashboard static root: anchored to this file (`src/web/` or compiled `dist/web/`) so the
+  // correct `public/dashboard` is used even when `process.cwd()` is not the repo root (PM2).
+  const webDir = path.dirname(fileURLToPath(import.meta.url));
+  const dashboardDir = path.resolve(webDir, '..', '..', 'public', 'dashboard');
   const dashboardIndex = path.join(dashboardDir, 'index.html');
+
+  const sendDashboardIndex: RequestHandler = (_req, res) => {
+    res.sendFile(dashboardIndex);
+  };
 
   // `/` is registered below when admin UI is enabled (redirect → /admin/).
   app.get('/health', healthHandler);
@@ -64,9 +70,7 @@ export function startWebServer(port = config.unsub.port): Server {
   app.use('/api/dashboard', createDashboardRouter());
   // Dashboard: serve `index.html` without 301/308 redirects (avoids nginx + curl -L loops and
   // ambiguous trailing-slash behavior). Static assets live under `/dashboard/*.js`, etc.
-  app.get(/^\/dashboard\/?$/i, (_req, res) => {
-    res.sendFile(dashboardIndex);
-  });
+  app.get(['/dashboard', '/dashboard/'], sendDashboardIndex);
   app.use(
     '/dashboard',
     express.static(dashboardDir, { index: false, redirect: false }),
