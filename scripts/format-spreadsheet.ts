@@ -20,15 +20,17 @@
  *   npx tsx scripts/format-spreadsheet.ts --all-known-tabs
  */
 
-import { google } from 'googleapis';
-import dotenv from 'dotenv';
+import { google } from "googleapis";
+import dotenv from "dotenv";
 
 dotenv.config();
 
-const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './credentials/service-account.json';
+const KEY_FILE =
+  process.env.GOOGLE_SERVICE_ACCOUNT_PATH ||
+  "./credentials/service-account.json";
 
 /** Default spreadsheet from env; override with --spreadsheet-id */
-let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '';
+let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || "";
 
 /** How far down to paint “user column” fills and filter range (large but bounded). */
 const DATA_ROW_END = 10000;
@@ -54,29 +56,29 @@ const SHEET_LAYOUTS: Record<
     colCount: 41,
     userBodyColumnIndices: Array.from({ length: 41 }, (_, i) => i),
   },
-  'Send Log': { colCount: 8, userBodyColumnIndices: [] },
-  'Reply Log': { colCount: 6, userBodyColumnIndices: [] },
-  'Company Profiles': {
+  "Send Log": { colCount: 8, userBodyColumnIndices: [] },
+  "Reply Log": { colCount: 6, userBodyColumnIndices: [] },
+  "Company Profiles": {
     colCount: 17,
     userBodyColumnIndices: [1, 15, 16],
   },
-  'Company Intelligence': {
+  "Company Intelligence": {
     colCount: 8,
     userBodyColumnIndices: [0, 1, 2, 3, 5],
   },
-  'Review Queue': {
+  "Review Queue": {
     colCount: 16,
     userBodyColumnIndices: [6, 7, 9, 10, 11, 12, 13, 14, 15],
   },
-  'QC Regen Audit': { colCount: 13, userBodyColumnIndices: [] },
+  "QC Regen Audit": { colCount: 13, userBodyColumnIndices: [] },
 };
 
 /** Header row: dark blue background, white bold text, wrapped and centered. */
 const HEADER_FORMAT = {
   backgroundColor: { red: 0.12, green: 0.31, blue: 0.48 },
-  horizontalAlignment: 'CENTER' as const,
-  verticalAlignment: 'MIDDLE' as const,
-  wrapStrategy: 'WRAP' as const,
+  horizontalAlignment: "CENTER" as const,
+  verticalAlignment: "MIDDLE" as const,
+  wrapStrategy: "WRAP" as const,
   textFormat: {
     bold: true,
     foregroundColor: { red: 1, green: 1, blue: 1 },
@@ -95,7 +97,7 @@ function parseArgs(): { gid?: number; allKnown: boolean } {
   // When no --gid is passed, format all tabs we know by name (Deaton outreach model).
   let allKnown = true;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--gid' && argv[i + 1]) {
+    if (argv[i] === "--gid" && argv[i + 1]) {
       const n = parseInt(argv[i + 1], 10);
       if (Number.isNaN(n)) {
         console.error(`Invalid --gid value: ${argv[i + 1]}`);
@@ -103,12 +105,12 @@ function parseArgs(): { gid?: number; allKnown: boolean } {
       }
       gid = n;
       i++;
-    } else if (argv[i] === '--spreadsheet-id' && argv[i + 1]) {
+    } else if (argv[i] === "--spreadsheet-id" && argv[i + 1]) {
       spreadsheetId = argv[i + 1];
       i++;
-    } else if (argv[i] === '--all-known-tabs') {
+    } else if (argv[i] === "--all-known-tabs") {
       allKnown = true;
-    } else if (argv[i] === '--first-sheet-only') {
+    } else if (argv[i] === "--first-sheet-only") {
       allKnown = false;
     }
   }
@@ -137,22 +139,22 @@ async function main() {
   const { gid, allKnown } = parseArgs();
 
   if (!spreadsheetId) {
-    console.error('Missing GOOGLE_SPREADSHEET_ID (or pass --spreadsheet-id).');
+    console.error("Missing GOOGLE_SPREADSHEET_ID (or pass --spreadsheet-id).");
     process.exit(1);
   }
 
   const auth = new google.auth.GoogleAuth({
     keyFile: KEY_FILE,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-  const sheets = google.sheets({ version: 'v4', auth });
+  const sheets = google.sheets({ version: "v4", auth });
 
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
   const sheetList = meta.data.sheets || [];
 
   const targets = sheetList.filter((s) => {
     const sid = s.properties?.sheetId;
-    const title = s.properties?.title || '';
+    const title = s.properties?.title || "";
     if (gid !== undefined && !Number.isNaN(gid)) {
       return sid === gid;
     }
@@ -167,14 +169,14 @@ async function main() {
     console.error(
       gid !== undefined
         ? `No sheet found with sheetId (gid) ${gid}. Check the URL #gid= value.`
-        : 'No sheets to format.',
+        : "No sheets to format.",
     );
     process.exit(1);
   }
 
   for (const sheet of targets) {
     const sheetId = sheet.properties?.sheetId;
-    const title = sheet.properties?.title || 'Sheet';
+    const title = sheet.properties?.title || "Sheet";
     if (sheetId === undefined || sheetId === null) continue;
 
     const colCount = columnCountForSheet(
@@ -192,7 +194,7 @@ async function main() {
           sheetId,
           gridProperties: { frozenRowCount: 1 },
         },
-        fields: 'gridProperties.frozenRowCount',
+        fields: "gridProperties.frozenRowCount",
       },
     });
 
@@ -201,12 +203,12 @@ async function main() {
       updateDimensionProperties: {
         range: {
           sheetId,
-          dimension: 'ROWS',
+          dimension: "ROWS",
           startIndex: 0,
           endIndex: 1,
         },
         properties: { pixelSize: 72 },
-        fields: 'pixelSize',
+        fields: "pixelSize",
       },
     });
 
@@ -222,7 +224,7 @@ async function main() {
         },
         cell: { userEnteredFormat: HEADER_FORMAT },
         fields:
-          'userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,wrapStrategy,textFormat)',
+          "userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,wrapStrategy,textFormat)",
       },
     });
 
@@ -239,7 +241,7 @@ async function main() {
             endColumnIndex: c + 1,
           },
           cell: { userEnteredFormat: USER_BODY_FILL },
-          fields: 'userEnteredFormat.backgroundColor',
+          fields: "userEnteredFormat.backgroundColor",
         },
       });
     }
@@ -264,7 +266,7 @@ async function main() {
       autoResizeDimensions: {
         dimensions: {
           sheetId,
-          dimension: 'COLUMNS',
+          dimension: "COLUMNS",
           startIndex: 0,
           endIndex: colCount,
         },
@@ -276,14 +278,16 @@ async function main() {
       requestBody: { requests },
     });
 
-    console.log(`Formatted sheet "${title}" (sheetId=${sheetId}, columns=${colCount}).`);
+    console.log(
+      `Formatted sheet "${title}" (sheetId=${sheetId}, columns=${colCount}).`,
+    );
   }
 
-  console.log('\nDone. Open the spreadsheet to review.');
+  console.log("\nDone. Open the spreadsheet to review.");
   console.log(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`);
 }
 
 main().catch((err: Error) => {
-  console.error('format-spreadsheet failed:', err.message);
+  console.error("format-spreadsheet failed:", err.message);
   process.exit(1);
 });
