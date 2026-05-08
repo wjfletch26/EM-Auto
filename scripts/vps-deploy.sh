@@ -7,6 +7,9 @@
 #   DEPLOY_GIT_REF — branch for `git pull origin <ref>` (default: main). Production should stay on main.
 #   DEPLOY_LOCK_FILE — flock path (default: $APP_DIR/.deploy.lock)
 #   UNSUB_PORT — localhost port for /health (default: 3000)
+#   HEALTH_WAIT_MAX_SECONDS — max time to wait for /health=200 after pm2 reload (default: 90).
+#     Startup runs SMTP verify before listen(); 2s was often too short (CI saw HTTP 000 / curl exit 7).
+#   HEALTH_RETRY_INTERVAL — seconds between attempts (default: 2)
 #   MIN_DISK_MB — minimum free space on $APP_DIR filesystem (default: 200)
 #   SKIP_PM2_CHECK=1 — skip `pm2 describe` (use once on first deploy only; do not leave set in automation)
 # Manifest (see scripts/write-deploy-manifest.mjs):
@@ -19,6 +22,8 @@ cd "$APP_DIR"
 PM2_APP="${PM2_APP_NAME:-deaton-outreach}"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-$APP_DIR/.deploy.lock}"
 HEALTH_PORT="${UNSUB_PORT:-3000}"
+HEALTH_WAIT_MAX_SECONDS="${HEALTH_WAIT_MAX_SECONDS:-90}"
+HEALTH_RETRY_INTERVAL="${HEALTH_RETRY_INTERVAL:-2}"
 MIN_DISK_MB="${MIN_DISK_MB:-200}"
 DEPLOY_GIT_REF="${DEPLOY_GIT_REF:-main}"
 
@@ -94,10 +99,27 @@ echo "==> pm2 reload $PM2_APP"
 pm2 reload "$PM2_APP"
 
 echo "==> health check"
-sleep 2
-# Non-fatal: log a short body sample; the next curl is the required success check.
-curl -sf "http://127.0.0.1:${HEALTH_PORT}/health" | head -c 400 || true
-echo ""
-curl -sf -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:${HEALTH_PORT}/health"
+HEALTH_URL="http://127.0.0.1:${HEALTH_PORT}/health"
+# Poll until Node accepts connections and returns 200. Single-shot curl after reload often failed with
+# HTTP 000 while verifyConnection() still runs (see src/main.ts — web server starts after SMTP OK).
+elapsed=0
+last_code="000"
+while [ "$elapsed" -lt "$HEALTH_WAIT_MAX_SECONDS" ]; do
+  last_code=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+  if [ "$last_code" = "200" ]; then
+    echo "HTTP $last_code (after ${elapsed}s)"
+    curl -sf "$HEALTH_URL" | head -c 400 || true
+    echo ""
+    break
+  fi
+  echo "waiting for /health (HTTP ${last_code}, ${elapsed}s / ${HEALTH_WAIT_MAX_SECONDS}s max)..."
+  sleep "$HEALTH_RETRY_INTERVAL"
+  elapsed=$((elapsed + HEALTH_RETRY_INTERVAL))
+done
+if [ "$last_code" != "200" ]; then
+  echo "ERROR: /health did not return 200 within ${HEALTH_WAIT_MAX_SECONDS}s (last HTTP ${last_code})" >&2
+  echo "Hint: pm2 logs ${PM2_APP}; confirm UNSUB_PORT matches the running app." >&2
+  exit 1
+fi
 
 echo "Deploy finished."
