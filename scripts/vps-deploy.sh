@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Idempotent VPS deploy: preflight → flock lock → pull → install → build → manifest → pm2 reload → health.
+# Idempotent VPS deploy: preflight → flock lock → git sync → install → build → manifest → pm2 reload → health.
 #
 # Environment (common):
 #   DEPLOY_PATH — app directory (default: pwd)
 #   PM2_APP_NAME — default deaton-outreach
-#   DEPLOY_GIT_REF — branch for `git pull origin <ref>` (default: main). Production should stay on main.
+#   DEPLOY_GIT_REF — branch deployed (default: main). Fetched from origin and checked out to match
+#     origin/<ref> exactly (discards divergent local commits on that branch — normal for CI VPS).
 #   DEPLOY_LOCK_FILE — flock path (default: $APP_DIR/.deploy.lock)
 #   UNSUB_PORT — localhost port for /health (default: 3000)
 #   HEALTH_WAIT_MAX_SECONDS — max time to wait for /health=200 after pm2 reload (default: 90).
@@ -75,8 +76,11 @@ fi
 # Present until the script exits (success or failure); the EXIT trap deletes it and releases flock.
 touch "$APP_DIR/.deploying"
 
-echo "==> git pull origin $DEPLOY_GIT_REF"
-git pull origin "$DEPLOY_GIT_REF"
+# `git pull` without a strategy fails on Git ≥2.27 when local and origin diverge ("Need to specify how
+# to reconcile"). CI deploys should match GitHub exactly — fetch and hard-reset the branch tip.
+echo "==> git sync to origin/$DEPLOY_GIT_REF"
+git fetch origin "$DEPLOY_GIT_REF"
+git checkout -B "$DEPLOY_GIT_REF" "origin/$DEPLOY_GIT_REF"
 
 echo "==> npm install"
 npm install
