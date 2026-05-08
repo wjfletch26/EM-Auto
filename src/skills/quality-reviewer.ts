@@ -10,7 +10,7 @@ import { logger } from '../logging/logger.js';
 import { loadPrompt } from '../services/prompt-loader.js';
 import { extractJSON, type LLMProvider } from '../services/llm-provider.js';
 import type { CompanyProfile } from './company-research.js';
-import type { EmailSequence } from './email-generator.js';
+import type { EmailSequenceForQc } from './email-generator.js';
 
 // ─── Output Schema ───────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export interface QualityReviewContext {
  *
  * @param provider       - LLM provider for the review
  * @param companyProfile - The company the emails are about
- * @param emails         - The generated 12-email sequence
+ * @param emails         - Generated emails for QC (full 12, or a synthetic 12 with locked placeholders, or any slice the caller sends)
  * @param personaStr     - The persona YAML used for generation
  * @param context        - Optional alignment, David's notes, and sequence structure
  * @returns Quality review with per-email assessments and flags
@@ -55,7 +55,7 @@ export interface QualityReviewContext {
 export async function reviewEmailQuality(
   provider: LLMProvider,
   companyProfile: CompanyProfile,
-  emails: EmailSequence,
+  emails: EmailSequenceForQc,
   personaStr: string,
   context?: QualityReviewContext,
 ): Promise<QualityReview> {

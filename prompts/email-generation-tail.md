@@ -36,10 +36,12 @@ The following steps are **final** text already written or operator-approved. You
 {{locked_steps_json}}
 ```
 
+When `locked_steps_json` is **`[]`** (empty array), there is no prior finalized copy. Treat **{{steps_to_generate_list}}** as the **opening wave**: follow the same quality rules as full-sequence generation for those steps only.
+
 ## Steps you must generate now:
 Generate **only** these step numbers: **{{steps_to_generate_list}}**
 
-For each step, use the **purpose** from the email structure for that step number. Match tone and vocabulary to the locked steps so the sequence feels like one coherent campaign.
+For each step, use the **purpose** from the email structure for that step number. When the locked-steps block is non-empty, match its tone and vocabulary so the sequence feels like one coherent campaign.
 
 Return JSON:
 

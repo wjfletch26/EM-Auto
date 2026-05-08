@@ -36,6 +36,9 @@ export const EmailSequenceSchema = z.object({
 
 export type EmailSequence = z.infer<typeof EmailSequenceSchema>;
 
+/** Any slice of steps passed into merged QC (opening wave, tail batch, or full 12 — includes synthetic rows for locked steps). */
+export type EmailSequenceForQc = { emails: GeneratedEmail[] };
+
 const EmailTailOutSchema = z.object({
   emails: z.array(GeneratedEmailSchema).min(1).max(12),
 });

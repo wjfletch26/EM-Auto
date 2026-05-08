@@ -15,6 +15,7 @@ import Handlebars from 'handlebars';
 import { config } from '../config/index.js';
 import { logger } from '../logging/logger.js';
 import * as sheets from '../services/sheets.js';
+import { nextBatchToGenerateFromSends } from './staged-sequence-batches.js';
 import { sendEmail, extractSmtpCode } from '../services/smtp.js';
 import { evaluateContact } from './sequence-engine.js';
 import { generateUnsubscribeUrl } from './unsubscribe.js';
@@ -449,6 +450,44 @@ async function recordSuccess(
     lastSendDate: new Date().toISOString(),
     status: isLastStep ? 'sequence_complete' : 'active',
   });
+
+  await maybeArmStagedSequenceAfterSend(contact, step.stepNumber);
+}
+
+/**
+ * After a successful send, queue the next 3-email batch when send milestones are met (pipeline cron runs generation).
+ * Never throws — send success must not depend on Sheets reads for staging.
+ */
+async function maybeArmStagedSequenceAfterSend(contact: Contact, sentStepNumber: number): Promise<void> {
+  if (!config.pipeline.enabled || !config.pipeline.stagedEmailGeneration) return;
+
+  const ps = (contact.pipelineStatus || '').trim().toLowerCase();
+  if (!contact.campaignId?.trim()) return;
+  if (ps !== 'approved' && ps !== 'active') return;
+  try {
+    const queue = await sheets.getReviewQueue();
+    const batch = nextBatchToGenerateFromSends(sentStepNumber, contact.email, queue);
+    if (!batch) return;
+
+    await sheets.updateContact(contact.email, contact._rowIndex, {
+      pipelineStatus: 'staged_sequence_continue',
+    });
+    logger.info(
+      {
+        module: 'send-engine',
+        email: contact.email,
+        sentStep: sentStepNumber,
+        queuedBatch: batch,
+      },
+      'Next staged email batch queued for pipeline',
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { module: 'send-engine', email: contact.email, error: msg },
+      'Could not arm staged sequence continuation (non-fatal)',
+    );
+  }
 }
 
 /** Handles SMTP send errors — classifies bounces and logs failures. */

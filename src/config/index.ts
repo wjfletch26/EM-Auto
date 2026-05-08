@@ -106,6 +106,7 @@ export function buildRawConfig() {
       companyRefreshCron: env.PIPELINE_COMPANY_REFRESH_CRON,
       companyRefreshEnabled: env.PIPELINE_COMPANY_REFRESH_ENABLED,
       companyStaleAfterDays: env.PIPELINE_COMPANY_STALE_AFTER_DAYS,
+      stagedEmailGeneration: env.PIPELINE_STAGED_EMAIL_GENERATION,
     },
     generationGate: {
       minAlignmentConfidence: env.GENERATION_MIN_ALIGNMENT_CONFIDENCE,

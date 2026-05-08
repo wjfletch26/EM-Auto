@@ -4,7 +4,7 @@
  * The cron scheduler calls runPipelineCycle() which:
  * 1. Finds contacts with pipeline_status = 'new' → company-scoped research + alignment (once per canonical URL),
  *    then per-contact Intel rows linked to Company Profiles.
- * 2. Finds contacts with pipeline_status = 'alignment_complete' / 'ready_for_generation' / `regenerate_future_sequence` → email gen + QC (full or future-tail)
+ * 2. Finds contacts with pipeline_status = 'alignment_complete' / 'ready_for_generation' / `regenerate_future_sequence` / `staged_sequence_continue` → email gen + QC (full or staged / future-tail)
  *
  * Company intelligence is shared via the **Company Profiles** sheet (one row per canonical company URL).
  * **Company Intelligence** holds per-contact briefing (David notes, executive brief, errors).
@@ -16,11 +16,12 @@ import * as sheets from '../services/sheets.js';
 import { createPerplexityProvider, createLLMProvider } from '../services/llm-provider.js';
 import { researchCompany, type CompanyProfile } from '../skills/company-research.js';
 import { evaluateAlignment } from '../skills/deaton-alignment.js';
-import { generateEmailSequence } from '../skills/email-generator.js';
+import { generateEmailSequence, generateEmailSequenceTail } from '../skills/email-generator.js';
 import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
 import { runFullMergedQC } from './email-qc-runner.js';
-import type { Contact, CompanyIntelligence, ReviewQueueEntry, StoredCompanyProfile } from '../services/sheets-types.js';
+import type { Contact, CompanyIntelligence, ReviewQueueEntry, StoredCompanyProfile, Campaign } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
+import type { GeneratedEmail, EmailSequence } from '../skills/email-generator.js';
 import { researchUrlFromCanonical } from '../utils/normalize-company-url.js';
 import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { duplicateCanonicalUrlsLowercased } from '../utils/canonical-sheet-audit.js';
@@ -42,6 +43,10 @@ import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js'
 import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 import { normalizeGeneratedSubject, normalizeGreetingBody } from './generated-email-normalize.js';
 import { processFutureTailRegeneration } from './future-tail-regeneration.js';
+import { processStagedSequenceContinuation } from './staged-sequence-continuation.js';
+import { maxSyncedStepFromCampaign } from './approval-watcher.js';
+import { buildLockedStepsForTailPrompt } from './tail-prompt-locked-steps.js';
+import { hasInitialStagedBatchInReviewQueue } from './staged-sequence-batches.js';
 
 export { normalizeGeneratedSubject, normalizeGreetingBody } from './generated-email-normalize.js';
 // ─── Max auto-QC regen ───────────────────────────────────────────────────────
@@ -123,7 +128,8 @@ export async function runPipelineCycle(): Promise<PipelineCycleSummary> {
       (c) =>
         c.pipelineStatus === 'alignment_complete' ||
         c.pipelineStatus === 'ready_for_generation' ||
-        c.pipelineStatus === 'regenerate_future_sequence',
+        c.pipelineStatus === 'regenerate_future_sequence' ||
+        c.pipelineStatus === 'staged_sequence_continue',
     );
     if (readyContacts.length > 0) {
       logger.info({ module: 'pipeline', count: readyContacts.length }, 'Generating emails for ready contacts');
@@ -132,6 +138,8 @@ export async function runPipelineCycle(): Promise<PipelineCycleSummary> {
       const intel = freshIntelByEmail.get(contact.email);
       if (contact.pipelineStatus === 'regenerate_future_sequence') {
         await processFutureTailRegeneration(contact, intel);
+      } else if (contact.pipelineStatus === 'staged_sequence_continue') {
+        await processStagedSequenceContinuation(contact, intel);
       } else if (intel) {
         await processEmailGeneration(contact, intel);
       } else {
@@ -374,7 +382,16 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
 
   try {
     const reviewQueue = await sheets.getReviewQueue();
-    if (hasExistingUnloadedSequence(contact.email, reviewQueue)) {
+    if (config.pipeline.stagedEmailGeneration) {
+      if (hasInitialStagedBatchInReviewQueue(contact.email, reviewQueue)) {
+        logger.warn(
+          { ...log },
+          'Unsent staged opening batch (steps 1–3) already exists in Review Queue; skipping regeneration',
+        );
+        await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'pending_review' });
+        return;
+      }
+    } else if (hasExistingUnloadedSequence(contact.email, reviewQueue)) {
       logger.warn(
         { ...log },
         'Unsent 12-step review queue sequence already exists; skipping regeneration',
@@ -443,20 +460,84 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
       'Starting email sequence generation',
     );
     const llm = createLLMProvider(config);
-    const emailSequence = await generateEmailSequence(
-      llm,
-      profile,
-      alignment,
-      {
-        firstName: contact.firstName,
-        lastName: contact.lastName,
-        title: contact.title,
-        company: contact.company,
-      },
-      briefing,
-    );
 
-    let sequence = emailSequence;
+    let sequence: EmailSequence;
+    const genStepSet: Set<number> = config.pipeline.stagedEmailGeneration
+      ? new Set([1, 2, 3])
+      : new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+    if (config.pipeline.stagedEmailGeneration) {
+      await sheets.markReviewQueueSupersededForContactStepsFrom(contact.email, 1);
+      const rqFresh = await sheets.getReviewQueue();
+      const emailNorm = contact.email.trim().toLowerCase();
+      const campaignRows = await sheets.getCampaigns();
+      const cid = contact.campaignId?.trim();
+      const campaign: Campaign =
+        (cid ? campaignRows.find((c) => c.campaignId.trim() === cid) : undefined) ??
+        ({
+          campaignId: '',
+          campaignName: '',
+          totalSteps: 12,
+          steps: [],
+          active: true,
+          campaignType: 'ai_generated',
+        } as Campaign);
+      const maxSynced = maxSyncedStepFromCampaign(cid ? campaign : undefined);
+      const stepsToGenerate = [1, 2, 3];
+      const approvedTailSteps = new Set<number>();
+      const lockedForPrompt = buildLockedStepsForTailPrompt(
+        emailNorm,
+        maxSynced,
+        campaign,
+        rqFresh,
+        stepsToGenerate,
+        approvedTailSteps,
+      );
+
+      const tailGenerated = await generateEmailSequenceTail(
+        llm,
+        profile,
+        alignment,
+        {
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          title: contact.title,
+          company: contact.company,
+        },
+        briefing,
+        lockedForPrompt,
+        stepsToGenerate,
+      );
+
+      const fullEmails: GeneratedEmail[] = [];
+      for (let s = 1; s <= 12; s++) {
+        const gen = tailGenerated.find((t) => t.step === s);
+        if (gen) {
+          fullEmails.push(gen);
+          continue;
+        }
+        const lock = lockedForPrompt.find((l) => l.step === s);
+        if (!lock) {
+          throw new Error(`Missing locked content for synthetic step ${s}`);
+        }
+        fullEmails.push(lock);
+      }
+      sequence = { emails: fullEmails };
+    } else {
+      sequence = await generateEmailSequence(
+        llm,
+        profile,
+        alignment,
+        {
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          title: contact.title,
+          company: contact.company,
+        },
+        briefing,
+      );
+    }
+
     const regenAttemptByStep = new Map<number, number>();
 
     let qcResult = await runFullMergedQC({
@@ -471,7 +552,7 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
 
     for (let round = 1; round <= MAX_AUTO_REGEN_ROUNDS; round++) {
       const failing = qcResult.email_reviews
-        .filter((r) => !r.pass)
+        .filter((r) => !r.pass && genStepSet.has(r.step))
         .sort((a, b) => a.step - b.step);
       if (failing.length === 0) break;
 
@@ -550,28 +631,32 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
     }
 
     const now = new Date().toISOString();
-    const failedAfterAuto = new Set(qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step));
+    const failedAfterAuto = new Set(
+      qcResult.email_reviews.filter((r) => !r.pass && genStepSet.has(r.step)).map((r) => r.step),
+    );
     const lineageStamp = formatGenerationLineageLine({
       profileVersion: stored.profileVersion.trim() || '1',
       promptVersion: config.lineage.promptVersion,
       qcRubricVersion: config.lineage.qcRubricVersion,
       alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
     });
-    const reviewEntries = sequence.emails.map((email) => {
-      const emailReview = qcResult.email_reviews.find((r) => r.step === email.step);
+    const stepsForReview = config.pipeline.stagedEmailGeneration ? [1, 2, 3] : sequence.emails.map((e) => e.step);
+    const reviewEntries = stepsForReview.map((emailStep) => {
+      const email = sequence.emails.find((e) => e.step === emailStep)!;
+      const emailReview = qcResult.email_reviews.find((r) => r.step === emailStep);
       const qcNotes =
         emailReview && !emailReview.pass
           ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
           : '';
       const reviewerNotes = [lineageStamp, qcNotes].filter(Boolean).join('\n');
       const subject = replaceEmDashesWithPlainHyphen(
-        normalizeGeneratedSubject(email.subject, email.purpose, email.step, contact.company),
+        normalizeGeneratedSubject(email.subject, email.purpose, emailStep, contact.company),
       );
 
       return {
         contactEmail: contact.email,
         companyName: stored.companyName,
-        stepNumber: email.step,
+        stepNumber: emailStep,
         emailPurpose: email.purpose,
         subject,
         body: normalizePlainBodyHyphens(
@@ -583,11 +668,11 @@ async function processEmailGeneration(contact: Contact, intel: CompanyIntelligen
         approvedDate: '',
         campaignId: '',
         daveNotes: '',
-        manualReviewRequired: failedAfterAuto.has(email.step),
-        qcAutoStatus: failedAfterAuto.has(email.step)
+        manualReviewRequired: failedAfterAuto.has(emailStep),
+        qcAutoStatus: failedAfterAuto.has(emailStep)
           ? ('auto_exhausted' as const)
           : ('ok' as const),
-        nextAction: failedAfterAuto.has(email.step) ? 'await_user_notes' : '',
+        nextAction: failedAfterAuto.has(emailStep) ? 'await_user_notes' : '',
         regenMode: '' as const,
       };
     });

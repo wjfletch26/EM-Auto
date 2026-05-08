@@ -10,14 +10,14 @@ import { reviewEmailQuality, type QualityReview } from '../skills/quality-review
 import { mergeHardQCIntoReview, runHardEmailQC } from './email-hard-qc.js';
 import { visitLanguageGuidanceForPrompt } from '../content/texas-triangle-visit-policy.js';
 import type { CompanyProfile } from '../skills/company-research.js';
-import type { EmailSequence } from '../skills/email-generator.js';
+import type { EmailSequenceForQc } from '../skills/email-generator.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
 import type { LLMProvider } from '../services/llm-provider.js';
 
 export interface FullQcInput {
   provider: LLMProvider;
   companyProfile: CompanyProfile;
-  sequence: EmailSequence;
+  sequence: EmailSequenceForQc;
   alignment: AlignmentResult;
   contactTitle: string;
   allowlistedCaseStudyIds: string[];

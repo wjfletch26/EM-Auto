@@ -89,6 +89,11 @@ const pipelineSchema = z.object({
   companyRefreshEnabled: envBoolean.default(true),
   /** Minimum age (`last_refreshed_at`) before a profile is eligible for refresh. */
   companyStaleAfterDays: z.coerce.number().int().positive().default(28),
+  /**
+   * When true (default): generate emails in four waves of three; later waves run after send milestones.
+   * When false: legacy single 12-email generation + full future-tail regen in one shot.
+   */
+  stagedEmailGeneration: envBoolean.default(true),
 });
 
 /** Block full / tail generation when company row is weak (Track B). All-off defaults = permissive. */

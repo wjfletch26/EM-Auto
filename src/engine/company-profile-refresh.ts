@@ -20,6 +20,7 @@ import { intelligenceJobTryEnter, intelligenceJobExit } from './intelligence-job
 import { storedProfileHasAlignment } from './company-profile-helpers.js';
 import { companyNeedsRefreshSpend, type CompanyRefreshSpendSnapshot } from './company-actionable.js';
 import { contactsAtCanonical, hasUnsyncedTailReviewRows, parseProfileVersionInt } from './sequence-funnel-state.js';
+import { hasUnsyncedStagedProfileRefreshTail } from './staged-sequence-batches.js';
 import { maxSyncedStepFromCampaign } from './approval-watcher.js';
 import type { Campaign } from '../services/sheets-types.js';
 import {
@@ -89,7 +90,11 @@ async function armRegenerateFutureSequenceAfterRefresh(
       continue;
     }
 
-    if (!hasUnsyncedTailReviewRows(contact.email, maxSynced, reviewQueue)) {
+    const hasTail = config.pipeline.stagedEmailGeneration
+      ? hasUnsyncedStagedProfileRefreshTail(contact.email, maxSynced, contact.lastStepSent, reviewQueue)
+      : hasUnsyncedTailReviewRows(contact.email, maxSynced, reviewQueue);
+
+    if (!hasTail) {
       logger.info(
         {
           module: 'company-refresh',

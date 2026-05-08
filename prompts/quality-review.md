@@ -8,7 +8,7 @@ You MUST return valid JSON matching the schema described below. Do not include a
 3. **Generic Language**: Flag any email that could be sent to any company without changes.
 4. **Unsupported Claims**: Flag any claims not grounded in the provided company data.
 5. **Tone**: Does the tone match the persona and follow professional B2B standards?
-6. **Progression**: Does the sequence evolve across 12 emails without repetition?
+6. **Progression**: Does the overall campaign arc evolve without repeating the same proof point in consecutive emails? When the JSON contains fewer than 12 emails, or includes placeholder/locked entries for later steps, judge progression only among the **newly authored** steps and do not fail solely because later steps are empty or missing.
 7. **Subject Lines**: Are they under 60 characters and free of spam triggers?
 8. **Sign-off hygiene**: The send system appends the real signature. Flag any email that still ends with a formal closing (Best, Sincerely, etc.), placeholder text like [Your Name], or a standalone "Deaton Engineering" signature line — those should be removed so only one signature appears when sent.
 9. **Typography**: Flag any em dash character (—) in subject or body. Generated copy must use commas, semicolons, or spaced hyphens instead.
@@ -32,7 +32,7 @@ JSON Schema:
 
 ---
 
-Review the following 12-email outreach sequence for quality.
+Review the following outreach emails for quality. The JSON may contain a **full 12-step** sequence, a **partial** batch (e.g. steps 1–3 or 4–6 only), or 12 objects where some steps are **locked placeholders** (minimal or empty body) — in those cases, evaluate only the substantive copy and return **one** `email_reviews` entry per object in the `emails` array, matching each `step`.
 
 ## Target Company Profile:
 {{company_profile}}
@@ -52,7 +52,7 @@ Review the following 12-email outreach sequence for quality.
 ## David's Project Notes (must influence copy when non-empty):
 {{david_project_notes}}
 
-## Planned 12-Step Structure (check each email fits its step):
+## Planned 12-Step Structure (check each **authored** email fits its step; ignore empty placeholders):
 {{email_structure}}
 
 ## Geography / in-person visits:
@@ -63,6 +63,6 @@ Instructions:
 2. For each email, note whether it passes and list any specific issues.
 3. Set overall_pass to false if any critical issues exist (generic content, unsupported claims, wrong tone).
 4. Be strict about specificity — generic emails that could be sent to anyone should fail.
-5. Check that the sequence progresses and doesn't repeat the same angle or proof point.
+5. Check that steps being reviewed do not repeat the same angle or proof point in back-to-back **authored** emails (use structure + provided steps only).
 
 Return your evaluation as a JSON object matching the schema provided.

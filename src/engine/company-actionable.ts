@@ -19,7 +19,12 @@ export interface CompanyRefreshSpendSnapshot {
   now: Date;
 }
 
-const GEN_PIPELINES = new Set(['alignment_complete', 'ready_for_generation', 'regenerate_future_sequence']);
+const GEN_PIPELINES = new Set([
+  'alignment_complete',
+  'ready_for_generation',
+  'regenerate_future_sequence',
+  'staged_sequence_continue',
+]);
 
 function contactNeedsGenerationPipeline(c: Contact): boolean {
   return GEN_PIPELINES.has(c.pipelineStatus?.trim().toLowerCase() ?? '');

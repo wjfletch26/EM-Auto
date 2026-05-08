@@ -1,8 +1,5 @@
 /**
- * Future-tail Review Queue regeneration after company profile version bumps.
- * Does not import `company-actionable` / `companyNeedsRefreshSpend` — that stays refresh-only.
- *
- * Operator `approved` rows are never superseded; merged QC runs on a full synthetic 12.
+ * Send-triggered staged batch: appends the next 4–6 / 7–9 / 10–12 Review Queue rows after milestones.
  */
 
 import { config } from '../config/index.js';
@@ -11,7 +8,7 @@ import * as sheets from '../services/sheets.js';
 import { createLLMProvider } from '../services/llm-provider.js';
 import { generateEmailSequenceTail } from '../skills/email-generator.js';
 import { regenerateSingleReviewEmail, buildQcRemediation } from '../skills/regenerate-review-email.js';
-import type { Contact, CompanyIntelligence, ReviewQueueEntry, Campaign } from '../services/sheets-types.js';
+import type { Contact, CompanyIntelligence, Campaign } from '../services/sheets-types.js';
 import type { AlignmentResult } from '../skills/deaton-alignment.js';
 import { resolveCanonicalCompanyUrl } from '../utils/resolve-canonical-company-url.js';
 import { duplicateCanonicalUrlsLowercased } from '../utils/canonical-sheet-audit.js';
@@ -24,7 +21,6 @@ import { companyProfileFromStored, alignmentFromStored } from './company-profile
 import { mergeContactBriefing } from './contact-briefing.js';
 import { runFullMergedQC } from './email-qc-runner.js';
 import { maxSyncedStepFromCampaign } from './approval-watcher.js';
-import { hasUnsyncedTailReviewRows, parseProfileVersionInt } from './sequence-funnel-state.js';
 import { replaceEmDashesWithPlainHyphen } from '../content/replace-em-dashes.js';
 import { normalizePlainBodyHyphens } from '../content/body-hyphen-normalize.js';
 import {
@@ -32,13 +28,9 @@ import {
   normalizeGreetingBody,
 } from './generated-email-normalize.js';
 import type { GeneratedEmail, EmailSequence } from '../skills/email-generator.js';
+import type { CompanyProfile } from '../skills/company-research.js';
 import { buildLockedStepsForTailPrompt, pickLatestReviewRowForStep } from './tail-prompt-locked-steps.js';
-import {
-  hasFurtherStagedRefreshDrafts,
-  hasUnsyncedStagedProfileRefreshTail,
-  normalizeLastStepSent,
-  stepsToGenerateForStagedFutureTail,
-} from './staged-sequence-batches.js';
+import { nextBatchToGenerateFromSends, normalizeLastStepSent } from './staged-sequence-batches.js';
 
 const MAX_AUTO_REGEN_ROUNDS = 3;
 
@@ -57,12 +49,21 @@ function briefingForPipeline(contact: Contact, intel: CompanyIntelligence | unde
   });
 }
 
-export async function processFutureTailRegeneration(
+/**
+ * Pipeline Phase B entry for `pipeline_status = staged_sequence_continue`.
+ */
+export async function processStagedSequenceContinuation(
   contact: Contact,
   intel: CompanyIntelligence | undefined,
 ): Promise<void> {
   const log = { module: 'pipeline', email: contact.email, company: contact.company };
   try {
+    if (!intel) {
+      logger.warn({ ...log }, 'Staged continuation requires a Company Intelligence row — skipping');
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'approved' });
+      return;
+    }
+
     const campaignRows = await sheets.getCampaigns();
     const campaignById = new Map<string, Campaign>();
     for (const c of campaignRows) {
@@ -74,23 +75,34 @@ export async function processFutureTailRegeneration(
     const campaign = cid ? campaignById.get(cid) : undefined;
     if (!cid || !campaign) {
       logger.error(
-        { ...log, event: 'regen-skip', reason: 'no_campaign_for_future_regen' },
-        'Future tail regen requires an assigned campaign',
+        { ...log, event: 'staged-skip', reason: 'no_campaign' },
+        'Staged sequence continuation requires an assigned campaign',
       );
-      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'approved' });
       return;
     }
 
     const reviewQueueBefore = await sheets.getReviewQueue();
     const emailNorm = contact.email.trim().toLowerCase();
     const maxSynced = maxSyncedStepFromCampaign(campaign);
-    const fromStep = maxSynced + 1;
+    const lastSent = normalizeLastStepSent(contact.lastStepSent);
+
+    const stepsToGenerate = nextBatchToGenerateFromSends(lastSent, contact.email, reviewQueueBefore);
+
+    if (!stepsToGenerate || stepsToGenerate.length === 0) {
+      logger.info(
+        { ...log, event: 'staged-skip', reason: 'no_batch_due', lastSent },
+        'Staged continuation: no batch to generate',
+      );
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'approved' });
+      return;
+    }
 
     const canonKey =
       resolveCanonicalCompanyUrl(contact.companyUrl) ||
-      resolveCanonicalCompanyUrl(intel?.canonicalCompanyUrl || '');
+      resolveCanonicalCompanyUrl(intel.canonicalCompanyUrl || '');
     if (!canonKey) {
-      throw new Error('Cannot resolve canonical company URL for future regen');
+      throw new Error('Cannot resolve canonical company URL for staged continuation');
     }
 
     const profileRows = await sheets.getCompanyProfiles();
@@ -111,153 +123,38 @@ export async function processFutureTailRegeneration(
     );
     if (!gateResult.ok) {
       const line = formatUpstreamGateErrorLog(gateResult.reasonCode, gateResult.details);
-      const intelRow =
-        intel ?? (await sheets.getCompanyIntelligence()).find((r) => r.contactEmail === emailNorm);
-      if (intelRow) {
-        const prev = intelRow.errorLog?.trim() ? `${intelRow.errorLog.trim()}\n` : '';
-        await sheets.updateCompanyIntelligence(contact.email, intelRow._rowIndex, {
-          errorLog: `${prev}${line}`.slice(0, 5000),
-        });
-      }
+      const prev = intel.errorLog?.trim() ? `${intel.errorLog.trim()}\n` : '';
+      await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
+        errorLog: `${prev}${line}`.slice(0, 5000),
+      });
       await sheets.updateContact(contact.email, contact._rowIndex, {
         pipelineStatus: 'company_intelligence_blocked',
       });
       logger.info(
         { ...log, event: 'upstream_gate_block', reasonCode: gateResult.reasonCode },
-        'Future tail blocked by upstream gate',
+        'Staged continuation blocked by upstream gate',
       );
       return;
     }
-
-    const profileVersion = parseProfileVersionInt(stored.profileVersion);
-    const lastUsed = parseProfileVersionInt(contact.lastProfileVersionUsedForGeneration);
-
-    if (profileVersion <= lastUsed) {
-      logger.info(
-        {
-          module: 'pipeline',
-          event: 'regen-skip',
-          contact: contact.email,
-          reason: 'already_generated_for_profile_version',
-          profileVersion,
-          previousVersion: lastUsed,
-        },
-        'Future tail regen skipped (version gate)',
-      );
-      const needsReview = reviewQueueBefore.some(
-        (e) =>
-          e.contactEmail === emailNorm &&
-          !e.campaignId?.trim() &&
-          e.status !== 'superseded' &&
-          (e.manualReviewRequired ||
-            e.qcAutoStatus === 'auto_exhausted' ||
-            (e.reviewerNotes || '').includes('AUTO_QC_EXHAUSTED')),
-      );
-      await sheets.updateContact(contact.email, contact._rowIndex, {
-        pipelineStatus: needsReview ? 'pending_review' : 'approved',
-      });
-      return;
-    }
-
-    if (normalizeLastStepSent(contact.lastStepSent) >= 12 && maxSynced < 12) {
-      logger.warn(
-        {
-          module: 'pipeline',
-          event: 'regen-skip',
-          reason: 'inconsistent_last_step_vs_campaign',
-          contact: contact.email,
-        },
-        'last_step_sent does not match campaign max synced — needs operator attention',
-      );
-      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'pending_review' });
-      return;
-    }
-
-    const useStagedRefreshTail =
-      config.pipeline.stagedEmailGeneration &&
-      hasUnsyncedStagedProfileRefreshTail(contact.email, maxSynced, contact.lastStepSent, reviewQueueBefore);
-    const useLegacyTail =
-      !config.pipeline.stagedEmailGeneration &&
-      hasUnsyncedTailReviewRows(contact.email, maxSynced, reviewQueueBefore);
-
-    if (!useStagedRefreshTail && !useLegacyTail) {
-      logger.info(
-        {
-          module: 'pipeline',
-          event: 'regen-skip',
-          contact: contact.email,
-          reason: 'no_unsynced_tail_review_rows',
-        },
-        'No unsynced Review Queue tail — nothing to regenerate',
-      );
-      await sheets.updateContact(contact.email, contact._rowIndex, {
-        pipelineStatus: 'approved',
-        lastProfileVersionUsedForGeneration: String(profileVersion),
-      });
-      return;
-    }
-
-    if (fromStep > 12) {
-      await sheets.updateContact(contact.email, contact._rowIndex, {
-        pipelineStatus: 'approved',
-        lastProfileVersionUsedForGeneration: String(profileVersion),
-      });
-      return;
-    }
-
-    logger.info(
-      {
-        module: 'pipeline',
-        event: 'regen-trigger',
-        contact: contact.email,
-        fromStep,
-        profileVersion,
-        previousVersion: lastUsed,
-      },
-      'Future tail regeneration starting',
-    );
-
-    await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generating' });
 
     const approvedTailSteps = new Set<number>();
-    for (let s = fromStep; s <= 12; s++) {
+    for (const s of stepsToGenerate) {
       const row = pickLatestReviewRowForStep(reviewQueueBefore, emailNorm, s);
       if (row && row.status === 'approved' && !row.campaignId?.trim()) {
         approvedTailSteps.add(s);
       }
     }
 
-    const stepsToGenerateAll: number[] = [];
-    for (let s = fromStep; s <= 12; s++) {
-      if (!approvedTailSteps.has(s)) stepsToGenerateAll.push(s);
-    }
-
-    let stepsToGenerate: number[] = stepsToGenerateAll;
-    if (config.pipeline.stagedEmailGeneration) {
-      const batchSlice = stepsToGenerateForStagedFutureTail({ fromStep });
-      const batchSet = new Set(batchSlice);
-      stepsToGenerate = stepsToGenerateAll.filter((s) => batchSet.has(s));
-    }
-
-    if (stepsToGenerate.length === 0) {
-      logger.info(
-        {
-          module: 'pipeline',
-          event: 'regen-skip',
-          contact: contact.email,
-          reason: 'no_steps_to_generate_in_batch',
-          fromStep,
-        },
-        'Future tail regen: nothing to generate in this batch',
-      );
-      await sheets.updateContact(contact.email, contact._rowIndex, {
-        pipelineStatus: 'approved',
-        lastProfileVersionUsedForGeneration: String(profileVersion),
-      });
+    const stepsFiltered = stepsToGenerate.filter((s) => !approvedTailSteps.has(s));
+    if (stepsFiltered.length === 0) {
+      logger.info({ ...log, event: 'staged-skip', reason: 'batch_fully_approved' }, 'Staged batch already approved');
+      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'approved' });
       return;
     }
 
-    const supersedeFrom = Math.min(...stepsToGenerate);
+    await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generating' });
+
+    const supersedeFrom = Math.min(...stepsFiltered);
     await sheets.markReviewQueueSupersededForContactStepsFrom(contact.email, supersedeFrom);
 
     const reviewQueueFresh = await sheets.getReviewQueue();
@@ -267,12 +164,12 @@ export async function processFutureTailRegeneration(
       maxSynced,
       campaign,
       reviewQueueFresh,
-      stepsToGenerate,
+      stepsFiltered,
       approvedTailSteps,
     );
 
     const briefing = briefingForPipeline(contact, intel);
-    const profile = companyProfileFromStored(stored);
+    const profile: CompanyProfile = companyProfileFromStored(stored);
     const alignment: AlignmentResult = alignmentFromStored(stored);
     const llm = createLLMProvider(config);
     const allowlistedCaseStudyIds = stored.caseStudiesSelected
@@ -283,31 +180,29 @@ export async function processFutureTailRegeneration(
     logger.info(
       {
         ...log,
-        event: 'future_tail_generation_start',
+        event: 'staged_continuation_generation_start',
+        steps: stepsFiltered,
         profileVersion: stored.profileVersion.trim() || '1',
         promptVersion: config.lineage.promptVersion,
         qcRubricVersion: config.lineage.qcRubricVersion,
       },
-      'Starting future-tail sequence generation',
+      'Staged sequence continuation: generating batch',
     );
 
-    let tailGenerated: GeneratedEmail[] = [];
-    if (stepsToGenerate.length > 0) {
-      tailGenerated = await generateEmailSequenceTail(
-        llm,
-        profile,
-        alignment,
-        {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          title: contact.title,
-          company: contact.company,
-        },
-        briefing,
-        lockedForPrompt,
-        stepsToGenerate,
-      );
-    }
+    const tailGenerated = await generateEmailSequenceTail(
+      llm,
+      profile,
+      alignment,
+      {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        title: contact.title,
+        company: contact.company,
+      },
+      briefing,
+      lockedForPrompt,
+      stepsFiltered,
+    );
 
     const fullEmails: GeneratedEmail[] = [];
     for (let s = 1; s <= 12; s++) {
@@ -325,6 +220,7 @@ export async function processFutureTailRegeneration(
 
     const sequence: EmailSequence = { emails: fullEmails };
     const regenAttemptByStep = new Map<number, number>();
+    const genStepSet = new Set(stepsFiltered);
 
     let qcResult = await runFullMergedQC({
       provider: llm,
@@ -336,8 +232,6 @@ export async function processFutureTailRegeneration(
       davidProjectNotes: briefing,
     });
 
-    const genStepSet = new Set(stepsToGenerate);
-
     for (let round = 1; round <= MAX_AUTO_REGEN_ROUNDS; round++) {
       const failing = qcResult.email_reviews
         .filter((r) => !r.pass && genStepSet.has(r.step))
@@ -346,7 +240,7 @@ export async function processFutureTailRegeneration(
 
       logger.info(
         { ...log, round, failingSteps: failing.map((f) => f.step) },
-        'Future tail: auto QC regeneration round',
+        'Staged continuation: auto QC regeneration round',
       );
 
       for (const failedStep of failing) {
@@ -395,9 +289,9 @@ export async function processFutureTailRegeneration(
               'qc_remediation',
               'merged_contact_briefing',
               'sequence_context',
-              'future_tail_regen',
+              'staged_continuation',
             ]),
-            triggerReason: 'merged_qc_fail_future_tail',
+            triggerReason: 'merged_qc_fail_staged_continuation',
             qcIssuesJson: JSON.stringify(failedStep.issues),
             suggestionUsed: (failedStep.suggestion ?? '').slice(0, 200),
             subjectBefore,
@@ -407,7 +301,7 @@ export async function processFutureTailRegeneration(
           });
         } catch (err: unknown) {
           const errmsg = err instanceof Error ? err.message : String(err);
-          logger.warn({ ...log, step: failedStep.step, round, error: errmsg }, 'Future tail auto regen failed');
+          logger.warn({ ...log, step: failedStep.step, round, error: errmsg }, 'Staged continuation auto regen failed');
         }
       }
 
@@ -425,7 +319,7 @@ export async function processFutureTailRegeneration(
     const now = new Date().toISOString();
     const failedAfterAuto = new Set(qcResult.email_reviews.filter((r) => !r.pass).map((r) => r.step));
 
-    const reviewEntries = stepsToGenerate.map((stepNumber) => {
+    const reviewEntries = stepsFiltered.map((stepNumber) => {
       const email = sequence.emails.find((e) => e.step === stepNumber)!;
       const emailReview = qcResult.email_reviews.find((r) => r.step === stepNumber);
       const qcNotes =
@@ -433,7 +327,7 @@ export async function processFutureTailRegeneration(
           ? `AUTO_QC_EXHAUSTED (manual required): ${emailReview.issues.join('; ')}`
           : '';
       const lineageStamp = formatGenerationLineageLine({
-        profileVersion: String(profileVersion),
+        profileVersion: stored.profileVersion.trim() || '1',
         promptVersion: config.lineage.promptVersion,
         qcRubricVersion: config.lineage.qcRubricVersion,
         alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
@@ -465,66 +359,53 @@ export async function processFutureTailRegeneration(
       };
     });
 
-    if (reviewEntries.length > 0) {
-      await sheets.appendReviewQueueBatch(reviewEntries);
-    }
+    await sheets.appendReviewQueueBatch(reviewEntries);
 
     const anyManual = reviewEntries.some((e) => e.manualReviewRequired || e.qcAutoStatus === 'auto_exhausted');
-    let terminalPipeline = anyManual ? 'pending_review' : 'approved';
-
-    let lastProfileVersionOut = String(profileVersion);
-    if (anyManual) {
-      lastProfileVersionOut = contact.lastProfileVersionUsedForGeneration?.trim() || String(lastUsed);
-    } else if (config.pipeline.stagedEmailGeneration) {
-      const reviewQueueAfter = await sheets.getReviewQueue();
-      const floorStep = Math.max(...stepsToGenerate);
-      if (hasFurtherStagedRefreshDrafts(emailNorm, reviewQueueAfter, floorStep)) {
-        terminalPipeline = 'regenerate_future_sequence';
-        lastProfileVersionOut = contact.lastProfileVersionUsedForGeneration?.trim() || String(lastUsed);
-      }
-    }
+    const terminalPipeline = anyManual ? 'pending_review' : 'approved';
 
     await sheets.updateContact(contact.email, contact._rowIndex, {
       pipelineStatus: terminalPipeline,
-      lastProfileVersionUsedForGeneration: lastProfileVersionOut,
     });
 
-    if (intel) {
-      const lineageStamp = formatGenerationLineageLine({
-        profileVersion: String(profileVersion),
-        promptVersion: config.lineage.promptVersion,
-        qcRubricVersion: config.lineage.qcRubricVersion,
-        alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
-      });
-      const briefParts = [
-        `Company: ${profile.company_name}`,
-        `Future tail regeneration (profile v${profileVersion}) steps: ${stepsToGenerate.join(', ') || '(none — all tail approved)'}`,
-        qcResult.overall_pass ? `QC: PASSED (${qcResult.overall_score})` : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,
-      ];
-      await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
-        executiveBrief: [lineageStamp, briefParts.join('\n\n')].join('\n\n'),
-        pipelineStatus: 'complete',
-        generatedDate: now,
-      });
-    }
+    const lineageStamp = formatGenerationLineageLine({
+      profileVersion: stored.profileVersion.trim() || '1',
+      promptVersion: config.lineage.promptVersion,
+      qcRubricVersion: config.lineage.qcRubricVersion,
+      alignmentConfidence: stored.confidenceScore.trim() || '(empty)',
+    });
+    const briefParts = [
+      `Company: ${profile.company_name}`,
+      `Staged batch steps: ${stepsFiltered.join(', ')}`,
+      qcResult.overall_pass ? `QC: PASSED (${qcResult.overall_score})` : `QC: FLAGGED — ${qcResult.flags.join('; ')}`,
+    ];
+    await sheets.updateCompanyIntelligence(contact.email, intel._rowIndex, {
+      executiveBrief: [lineageStamp, briefParts.join('\n\n')].join('\n\n'),
+      pipelineStatus: 'complete',
+      generatedDate: now,
+    });
 
-    logger.info({ ...log, event: 'regen-complete', qcPass: qcResult.overall_pass }, 'Future tail regeneration done');
+    logger.info({ ...log, event: 'staged-continuation-complete', qcPass: qcResult.overall_pass }, 'Staged batch done');
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ ...log, error: msg }, 'Future tail regeneration failed');
-    try {
-      await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generation_failed' });
-      const intelRows = await sheets.getCompanyIntelligence();
-      const row = intelRows.find((r) => r.contactEmail === contact.email);
-      if (row) {
-        const existingErrors = row.errorLog ? `${row.errorLog}\n` : '';
-        await sheets.updateCompanyIntelligence(contact.email, row._rowIndex, {
-          errorLog: `${existingErrors}[${new Date().toISOString()}] ${msg}`.slice(0, 5000),
-          pipelineStatus: 'generation_failed',
-        });
-      }
-    } catch {
-      /* best-effort */
+    logger.error({ ...log, error: msg }, 'Staged sequence continuation failed');
+    await safeUpdateStagedContinuationError(contact, msg);
+  }
+}
+
+async function safeUpdateStagedContinuationError(contact: Contact, error: string): Promise<void> {
+  try {
+    await sheets.updateContact(contact.email, contact._rowIndex, { pipelineStatus: 'generation_failed' });
+    const intelRows = await sheets.getCompanyIntelligence();
+    const row = intelRows.find((r) => r.contactEmail === contact.email);
+    if (row) {
+      const existingErrors = row.errorLog ? `${row.errorLog}\n` : '';
+      await sheets.updateCompanyIntelligence(contact.email, row._rowIndex, {
+        errorLog: `${existingErrors}[${new Date().toISOString()}] ${error}`.slice(0, 5000),
+        pipelineStatus: 'generation_failed',
+      });
     }
+  } catch {
+    /* best-effort */
   }
 }
