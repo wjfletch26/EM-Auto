@@ -40,6 +40,12 @@ function appendLimitedError(prev: string, msg: string): string {
   return `${existing}[${new Date().toISOString()}] ${msg}`.slice(0, 5000);
 }
 
+/** Returned from `runCompanyProfileRefreshCycle()` — admin API surfaces this. */
+export interface CompanyProfileRefreshCycleSummary {
+  skipReason?: 'pipeline_disabled' | 'company_refresh_disabled' | 'intelligence_job_busy';
+  profilesRefreshed: number;
+}
+
 /**
  * After a successful profile refresh, set `regenerate_future_sequence` when tail RQ work exists
  * and profile version advanced past `lastProfileVersionUsedForGeneration` per contact.
@@ -146,13 +152,20 @@ async function armRegenerateFutureSequenceAfterRefresh(
 /**
  * Processes every Company Profiles row older than `companyStaleAfterDays` that still has usable alignment.
  */
-export async function runCompanyProfileRefreshCycle(): Promise<void> {
-  if (!config.pipeline.enabled || !config.pipeline.companyRefreshEnabled) return;
+export async function runCompanyProfileRefreshCycle(): Promise<CompanyProfileRefreshCycleSummary> {
+  if (!config.pipeline.enabled) {
+    return { skipReason: 'pipeline_disabled', profilesRefreshed: 0 };
+  }
+  if (!config.pipeline.companyRefreshEnabled) {
+    return { skipReason: 'company_refresh_disabled', profilesRefreshed: 0 };
+  }
 
   if (!intelligenceJobTryEnter()) {
     logger.debug({ module: 'company-refresh' }, 'Skipped — intelligence job busy');
-    return;
+    return { skipReason: 'intelligence_job_busy', profilesRefreshed: 0 };
   }
+
+  let refreshAttempts = 0;
 
   try {
     const staleMs = config.pipeline.companyStaleAfterDays * 86_400_000;
@@ -176,8 +189,6 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
       campaignById,
       now: nowDate,
     };
-
-    let refreshAttempts = 0;
 
     for (const row of rows) {
       if (!storedProfileHasAlignment(row)) continue;
@@ -269,9 +280,12 @@ export async function runCompanyProfileRefreshCycle(): Promise<void> {
     if (refreshAttempts > 0) {
       logger.info({ module: 'company-refresh', refreshAttempts }, 'Company profile refresh pass finished');
     }
+
+    return { profilesRefreshed: refreshAttempts };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ module: 'company-refresh', error: msg }, 'Company refresh outer error');
+    return { profilesRefreshed: refreshAttempts };
   } finally {
     intelligenceJobExit();
   }

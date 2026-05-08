@@ -399,8 +399,8 @@ export function createAdminRouter(): Router {
     '/actions/company-profile-refresh',
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'company_profile_refresh' });
-      await runCompanyProfileRefreshCycle();
-      res.json({ ok: true });
+      const companyProfileRefresh = await runCompanyProfileRefreshCycle();
+      res.json({ ok: true, companyProfileRefresh });
     }),
   );
 
@@ -408,8 +408,8 @@ export function createAdminRouter(): Router {
     '/actions/pipeline-cycle',
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'pipeline_cycle' });
-      await runPipelineCycle();
-      res.json({ ok: true });
+      const pipelineCycle = await runPipelineCycle();
+      res.json({ ok: true, pipelineCycle });
     }),
   );
 
@@ -417,8 +417,8 @@ export function createAdminRouter(): Router {
     '/actions/approval-watcher',
     asyncHandler(async (req, res, _next) => {
       adminLog(req, { action: 'approval_watcher' });
-      await runApprovalWatcherCycle();
-      res.json({ ok: true });
+      const approvalWatcher = await runApprovalWatcherCycle();
+      res.json({ ok: true, approvalWatcher });
     }),
   );
 
@@ -465,8 +465,8 @@ export function createAdminRouter(): Router {
       if (intel) {
         await sheets.updateCompanyIntelligence(email, intel._rowIndex, { errorLog: '' });
       }
-      await runPipelineCycle();
-      res.json({ ok: true });
+      const pipelineCycle = await runPipelineCycle();
+      res.json({ ok: true, pipelineCycle });
     }),
   );
 
@@ -494,8 +494,8 @@ export function createAdminRouter(): Router {
       adminLog(req, { action: 'regenerate_sequence', email });
       const n = await sheets.markReviewQueueSupersededForContact(email);
       await sheets.updateContact(email, contact._rowIndex, { pipelineStatus: 'alignment_complete' });
-      await runPipelineCycle();
-      res.json({ ok: true, supersededReviewRows: n });
+      const pipelineCycle = await runPipelineCycle();
+      res.json({ ok: true, supersededReviewRows: n, pipelineCycle });
     }),
   );
 
@@ -520,8 +520,8 @@ export function createAdminRouter(): Router {
         pipelineStatus: 'regenerate_future_sequence',
         lastProfileVersionUsedForGeneration: '',
       });
-      await runPipelineCycle();
-      res.json({ ok: true });
+      const pipelineCycle = await runPipelineCycle();
+      res.json({ ok: true, pipelineCycle });
     }),
   );
 

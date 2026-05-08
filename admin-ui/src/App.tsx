@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminFetch, getStoredApiKey, setStoredApiKey } from './api';
+import { formatSequenceActionSuccess } from './sequence-action-feedback';
 
 type Tab = 'contacts' | 'intel' | 'profiles' | 'review' | 'actions';
 
@@ -506,8 +507,8 @@ export function App(): JSX.Element {
   const postAction = async (path: string) => {
     setLoading(true);
     try {
-      const data = await adminFetch(path, { method: 'POST' });
-      showMsg('ok', JSON.stringify(data));
+      const data = await adminFetch<Record<string, unknown>>(path, { method: 'POST' });
+      showMsg('ok', formatSequenceActionSuccess(path, data));
     } catch (e) {
       showMsg('err', e instanceof Error ? e.message : String(e));
     } finally {
@@ -1084,6 +1085,24 @@ export function App(): JSX.Element {
             row. Pipeline actions need <code>PIPELINE_ENABLED=true</code> on the server. Send cycle returns 409 if a run
             is already in progress.
           </p>
+          <ul style={{ fontSize: '0.8rem', color: '#b0b8c0', margin: '0 0 1rem 1.25rem', lineHeight: 1.5 }}>
+            <li>
+              <strong>Run send cycle:</strong> sends only when contacts are eligible per campaign timing (delay days,
+              last_send_date, review status, etc.). Success with <code>sent: 0</code> often means nothing was due.
+            </li>
+            <li>
+              <strong>Run pipeline cycle:</strong> advances <code>pipeline_status</code> buckets. Counts show how many
+              contacts were examined; an existing company profile can be reused quietly.
+            </li>
+            <li>
+              <strong>Research again:</strong> resets the contact to &quot;new&quot; and runs one pipeline pass. If the
+              shared company profile already exists, sheets may look unchanged.
+            </li>
+            <li>
+              <strong>Regenerate sequence:</strong> supersedes open review rows — most visible when you need new draft
+              emails.
+            </li>
+          </ul>
           <div className="row-actions" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
             <label>
               Search (email, name, or company)

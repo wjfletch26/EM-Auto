@@ -49,6 +49,17 @@ export { normalizeGeneratedSubject, normalizeGreetingBody } from './generated-em
 const MAX_AUTO_REGEN_ROUNDS = 3;
 const REQUIRED_SEQUENCE_STEPS = 12;
 
+/** Returned from `runPipelineCycle()` so `/api/admin` can show operators what ran (cron callers ignore). */
+export interface PipelineCycleSummary {
+  pipelineEnabled: boolean;
+  /** True when mutex was busy — Phase A/B did not execute. */
+  skippedBecauseIntelligenceJobBusy: boolean;
+  contactsProcessedPhaseA: number;
+  contactsProcessedPhaseB: number;
+  /** When set, counts above may reflect partial progress before failure. */
+  error?: string;
+}
+
 // ─── Main Pipeline Cycle ─────────────────────────────────────────────────────
 
 /**
@@ -57,13 +68,28 @@ const REQUIRED_SEQUENCE_STEPS = 12;
  *   Phase A: new → company profile (research + alignment) + per-contact intel row
  *   Phase B: alignment_complete → email gen + quality review
  */
-export async function runPipelineCycle(): Promise<void> {
-  if (!config.pipeline.enabled) return;
+export async function runPipelineCycle(): Promise<PipelineCycleSummary> {
+  if (!config.pipeline.enabled) {
+    return {
+      pipelineEnabled: false,
+      skippedBecauseIntelligenceJobBusy: false,
+      contactsProcessedPhaseA: 0,
+      contactsProcessedPhaseB: 0,
+    };
+  }
 
   if (!intelligenceJobTryEnter()) {
     logger.debug({ module: 'pipeline' }, 'Pipeline cycle skipped: intelligence job already running');
-    return;
+    return {
+      pipelineEnabled: true,
+      skippedBecauseIntelligenceJobBusy: true,
+      contactsProcessedPhaseA: 0,
+      contactsProcessedPhaseB: 0,
+    };
   }
+
+  let contactsProcessedPhaseA = 0;
+  let contactsProcessedPhaseB = 0;
 
   try {
     const [contacts, intelRows] = await Promise.all([
@@ -82,6 +108,7 @@ export async function runPipelineCycle(): Promise<void> {
     }
     for (const contact of newContacts) {
       await processResearchAndAlignment(contact, intelByEmail);
+      contactsProcessedPhaseA += 1;
     }
 
     const freshIntel = await sheets.getCompanyIntelligence();
@@ -113,10 +140,24 @@ export async function runPipelineCycle(): Promise<void> {
           'Contact ready for generation but no Company Intelligence row — skipping',
         );
       }
+      contactsProcessedPhaseB += 1;
     }
+    return {
+      pipelineEnabled: true,
+      skippedBecauseIntelligenceJobBusy: false,
+      contactsProcessedPhaseA,
+      contactsProcessedPhaseB,
+    };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ module: 'pipeline', error: msg }, 'Pipeline cycle error');
+    return {
+      pipelineEnabled: true,
+      skippedBecauseIntelligenceJobBusy: false,
+      contactsProcessedPhaseA,
+      contactsProcessedPhaseB,
+      error: msg,
+    };
   } finally {
     intelligenceJobExit();
   }

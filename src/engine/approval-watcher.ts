@@ -48,16 +48,24 @@ function aiCampaignDelayDays(stepNumber: number): string {
   return stepNumber === 1 ? '0' : '30';
 }
 
+/** Returned from `runApprovalWatcherCycle()` — admin API surfaces this to operators. */
+export interface ApprovalWatcherCycleSummary {
+  skippedBecauseAlreadyRunning: boolean;
+  /** One append (new campaign row) or one triplet patch counted per action. */
+  incrementalSyncActionsApplied: number;
+}
+
 /**
  * Runs one approval pass: for each contact at most **one** append or one triplet patch.
  */
-export async function runApprovalWatcherCycle(): Promise<void> {
+export async function runApprovalWatcherCycle(): Promise<ApprovalWatcherCycleSummary> {
   if (approvalWatcherRunning) {
     logger.debug({ module: 'approval-watcher' }, 'Approval watcher cycle skipped: previous run in progress');
-    return;
+    return { skippedBecauseAlreadyRunning: true, incrementalSyncActionsApplied: 0 };
   }
 
   approvalWatcherRunning = true;
+  let incrementalSyncActionsApplied = 0;
 
   try {
     const [reviewQueue, contacts, campaignRows] = await Promise.all([
@@ -157,6 +165,7 @@ export async function runApprovalWatcherCycle(): Promise<void> {
           { module: 'approval-watcher', email: emailKey, campaignId, step: 1, rowIndex: newRow },
           'Incremental campaign: appended row with step 1 only',
         );
+        incrementalSyncActionsApplied += 1;
         continue;
       }
 
@@ -188,11 +197,15 @@ export async function runApprovalWatcherCycle(): Promise<void> {
           },
           'Incremental campaign: patched step triplet',
         );
+        incrementalSyncActionsApplied += 1;
       }
     }
+
+    return { skippedBecauseAlreadyRunning: false, incrementalSyncActionsApplied };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ module: 'approval-watcher', error: msg }, 'Approval watcher cycle failed');
+    return { skippedBecauseAlreadyRunning: false, incrementalSyncActionsApplied };
   } finally {
     approvalWatcherRunning = false;
   }
