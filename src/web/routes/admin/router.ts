@@ -13,6 +13,16 @@ import type {
   ReviewQueueUpdate,
   StoredCompanyProfile,
 } from '../../../services/sheets-types.js';
+import {
+  assertImportPayloadUnderByteLimit,
+  assertRowLimit,
+  buildHeaderToFieldMap,
+  classifyContactImportRows,
+  classifyJsonRows,
+  parseContactsSpreadsheet,
+  stripUtf8Bom,
+  type ImportDelimiterOption,
+} from '../../../services/contact-sheet-import.js';
 import { executeSendCycle } from '../../../engine/send-engine.js';
 import { runPipelineCycle } from '../../../engine/pipeline-orchestrator.js';
 import { runApprovalWatcherCycle } from '../../../engine/approval-watcher.js';
@@ -195,36 +205,168 @@ export function createAdminRouter(): Router {
   r.post(
     '/contacts/import',
     asyncHandler(async (req, res, _next) => {
-      const rows = (req.body as { rows?: unknown }).rows;
-      if (!Array.isArray(rows)) {
-        res.status(400).json({ error: 'Body must be { rows: [...] }' });
+      const body = req.body as {
+        dryRun?: boolean;
+        rows?: unknown;
+        spreadsheetText?: unknown;
+        delimiter?: unknown;
+      };
+
+      const dryRun = Boolean(body.dryRun);
+      const hasRows = Array.isArray(body.rows);
+      const hasSpreadsheetText = typeof body.spreadsheetText === 'string';
+
+      if (hasRows && hasSpreadsheetText) {
+        res.status(400).json({
+          error: 'Provide exactly one import source: rows (JSON array) or spreadsheetText (CSV/TSV string)',
+          code: 'IMPORT_SOURCE_CONFLICT',
+        });
         return;
       }
-      const errors: string[] = [];
-      let ok = 0;
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i] as Record<string, unknown>;
-        try {
-          await sheets.appendContact({
-            email: String(row.email || ''),
-            firstName: String(row.firstName || ''),
-            lastName: row.lastName !== undefined ? String(row.lastName) : undefined,
-            company: row.company !== undefined ? String(row.company) : undefined,
-            title: row.title !== undefined ? String(row.title) : undefined,
-            campaignId: row.campaignId !== undefined ? String(row.campaignId) : undefined,
-            custom1: row.custom1 !== undefined ? String(row.custom1) : undefined,
-            custom2: row.custom2 !== undefined ? String(row.custom2) : undefined,
-            notes: row.notes !== undefined ? String(row.notes) : undefined,
-            companyUrl: row.companyUrl !== undefined ? String(row.companyUrl) : undefined,
-            pipelineStatus: row.pipelineStatus !== undefined ? String(row.pipelineStatus) : undefined,
-          });
-          ok += 1;
-        } catch (e) {
-          errors.push(`Row ${i + 1}: ${e instanceof Error ? e.message : String(e)}`);
-        }
+
+      if (!hasRows && !hasSpreadsheetText) {
+        res.status(400).json({
+          error: 'Body must include rows (array) or spreadsheetText (string)',
+          code: 'MISSING_IMPORT_SOURCE',
+        });
+        return;
       }
-      adminLog(req, { action: 'import_contacts', ok, failed: errors.length });
-      res.json({ imported: ok, failed: errors.length, errors });
+
+      /** Case-folded emails already persisted (see getContacts) — authoritative for duplicate_in_sheet checks. */
+
+
+      const sheetContacts = await sheets.getContacts();
+      const sheetEmails = new Set(sheetContacts.map((c) => c.email.trim().toLowerCase()));
+
+      const parseDelimiterOption = (d: unknown): ImportDelimiterOption | null => {
+        if (d === undefined || d === null) return 'auto';
+        if (d === 'auto' || d === 'tab' || d === 'comma') return d;
+        return null;
+      };
+
+      try {
+        /** Shared classification outputs for dry-run preview and commits. */
+
+
+        let classified: ReturnType<typeof classifyContactImportRows>;
+
+        if (hasSpreadsheetText) {
+          const trimmed = stripUtf8Bom(String(body.spreadsheetText ?? '').trim());
+          if (!trimmed) {
+            res.status(400).json({
+              error: 'spreadsheetText is empty after trim',
+              code: 'EMPTY_SPREADSHEET_TEXT',
+            });
+            return;
+          }
+
+          assertImportPayloadUnderByteLimit(trimmed, 'spreadsheetText');
+
+          const delim = parseDelimiterOption(body.delimiter);
+          if (!delim) {
+            res.status(400).json({
+              error: 'delimiter must be auto, tab, or comma',
+              code: 'BAD_DELIMITER',
+            });
+            return;
+          }
+
+          const parsed = parseContactsSpreadsheet(trimmed, delim);
+          assertRowLimit(parsed.rows.length);
+          classified = classifyContactImportRows(
+            parsed.rows,
+            buildHeaderToFieldMap(parsed.headerTitles),
+            sheetEmails,
+          );
+        } else {
+          const rows = body.rows as unknown[];
+
+          /** Guard JSON rows path with matching byte cap (serialized array). */
+
+
+          assertImportPayloadUnderByteLimit(JSON.stringify(rows), 'rows');
+
+          assertRowLimit(rows.length);
+          classified = classifyJsonRows(rows, sheetEmails);
+        }
+
+        /** Response core — aligns with ADMIN_API spreadsheet import contract. */
+
+
+        const basePayload = {
+          totalRows: classified.totalRows,
+          duplicateInFile: classified.duplicateInFile,
+          duplicateInSheet: classified.duplicateInSheet,
+          invalidRows: classified.invalidRows,
+          preview: classified.preview,
+          errors: classified.errors.slice(),
+        };
+
+        adminLog(req, {
+          action: 'import_contacts',
+          dryRun,
+          totalRows: basePayload.totalRows,
+          duplicates:
+            basePayload.duplicateInFile +
+            basePayload.duplicateInSheet,
+          invalid: basePayload.invalidRows,
+        });
+
+        if (dryRun) {
+          res.status(200).json({
+            ...basePayload,
+            wouldImport: classified.wouldAppendCount,
+          });
+          return;
+        }
+
+        let imported = 0;
+
+        /** Row-level Sheets failures keep prior rows committed (partial success). */
+
+
+        const errs = [...basePayload.errors];
+
+        for (const { row, mapped } of classified.toAppend) {
+          try {
+            await sheets.appendContactRowWithoutDuplicateCheck(mapped);
+            imported++;
+          } catch (e) {
+            if (errs.length < 100) {
+              errs.push({
+                row,
+                code: 'SHEETS_APPEND_FAILED',
+                message: e instanceof Error ? e.message : String(e),
+              });
+            }
+          }
+        }
+
+        const appendFailed = classified.toAppend.length - imported;
+
+        res.status(200).json({
+          ...basePayload,
+          imported,
+          appendFailed,
+          errors: errs,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (
+          msg.startsWith('PAYLOAD_TOO_LARGE') ||
+          msg.startsWith('ROW_LIMIT_EXCEEDED') ||
+          msg.includes('CSV parse') ||
+          msg.includes('CSV parse produced')
+        ) {
+          let code = 'BAD_IMPORT_REQUEST';
+          if (msg.startsWith('PAYLOAD_TOO_LARGE')) code = 'PAYLOAD_TOO_LARGE';
+          else if (msg.startsWith('ROW_LIMIT_EXCEEDED')) code = 'ROW_LIMIT_EXCEEDED';
+
+          res.status(400).json({ error: msg, code });
+          return;
+        }
+        throw e;
+      }
     }),
   );
 

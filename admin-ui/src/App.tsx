@@ -119,6 +119,40 @@ function EnvBannerBar({
 /** Contact row shape from GET /contacts (mirrors backend). */
 type ContactRow = Record<string, unknown> & { email: string; _rowIndex: number };
 
+/** Server contract for POST /contacts/import preview + commit. */
+type ImportErrorItem = { row: number; code: string; message: string };
+
+type ContactImportResponse = {
+  totalRows: number;
+  /** Dry-run only: rows that passed validation + duplicate checks (would append). */
+  wouldImport?: number;
+  /** Commit only */
+  imported?: number;
+  duplicateInFile: number;
+  duplicateInSheet: number;
+  invalidRows: number;
+  appendFailed?: number;
+  preview?: Array<{ row: number; mapped: Record<string, unknown> }>;
+  errors: ImportErrorItem[];
+};
+
+/** Mirror server MVP_IMPORT limits for early client rejection (server still enforces). */
+const IMPORT_MAX_UTF8_BYTES = 5 * 1024 * 1024;
+
+const IMPORT_MAX_DATA_ROWS = 10_000;
+
+function utf8ByteLength(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/**
+ * Rough non-empty-line count minus header row — UX hint only; server uses Papa `skipEmptyLines`.
+ */
+function estimatedDataRowsFromCsvText(raw: string): number {
+  const lines = raw.trim().split(/\r\n|\r|\n/).filter((line) => line.trim().length > 0);
+  return Math.max(0, lines.length - 1);
+}
+
 /** Review queue row from API (subject/body from generated sequence). */
 type ReviewRow = Record<string, unknown> & {
   contactEmail: string;
@@ -168,6 +202,12 @@ export function App(): JSX.Element {
   });
 
   const [importJson, setImportJson] = useState('[\n  { "email": "a@b.com", "firstName": "Ann" }\n]');
+  /** Pasted or file-loaded CSV/TSV for the primary import path. */
+  const [importSpreadsheetText, setImportSpreadsheetText] = useState('');
+  /** Server-side Papa delimiter: auto picks tab when the header line contains a tab. */
+  const [importDelimiter, setImportDelimiter] = useState<'auto' | 'tab' | 'comma'>('auto');
+  /** Last dry-run response for spreadsheet or JSON preview. */
+  const [importPreview, setImportPreview] = useState<ContactImportResponse | null>(null);
   /** Client-side filter on Sequence actions tab (matches email, name, or company). */
   const [sequenceFilterEmail, setSequenceFilterEmail] = useState('');
 
@@ -427,26 +467,132 @@ export function App(): JSX.Element {
     }
   };
 
-  const runImport = async () => {
+  /** Client-side row-count guard aligned with CONTACT_IMPORT_ROW_CAP on the server. */
+  function assertImportJsonWithinClientLimits(rows: unknown[]): void {
+    if (rows.length > IMPORT_MAX_DATA_ROWS) {
+      throw new Error(`At most ${IMPORT_MAX_DATA_ROWS} rows (${rows.length} provided).`);
+    }
+  }
+
+  const loadSpreadsheetFile = (file: File) => {
+    if (file.size > IMPORT_MAX_UTF8_BYTES) {
+      showMsg('err', `File is ${file.size} bytes; max payload is ${IMPORT_MAX_UTF8_BYTES} (5 MiB).`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      setImportSpreadsheetText(text);
+      setImportPreview(null);
+      showMsg('ok', `Loaded ${file.name} (${file.size} bytes)`);
+    };
+    reader.onerror = () => showMsg('err', 'Could not read file');
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const runSpreadsheetImport = async (dryRun: boolean) => {
+    const text = importSpreadsheetText;
+    if (!text.trim()) {
+      showMsg('err', 'Paste or load CSV / TSV first.');
+      return;
+    }
+    const bytes = utf8ByteLength(text);
+    if (bytes > IMPORT_MAX_UTF8_BYTES) {
+      showMsg('err', `Import text is about ${bytes} UTF-8 bytes; max allowed is ${IMPORT_MAX_UTF8_BYTES} (5 MiB).`);
+      return;
+    }
+    const est = estimatedDataRowsFromCsvText(text);
+    if (est > IMPORT_MAX_DATA_ROWS) {
+      showMsg(
+        'err',
+        `Roughly ${est} data rows (by line count); max is ${IMPORT_MAX_DATA_ROWS}. Remove rows or split the file.`,
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await adminFetch<ContactImportResponse>('/contacts/import', {
+        method: 'POST',
+        json: { spreadsheetText: text, delimiter: importDelimiter, dryRun },
+      });
+      const summaryPieces = dryRun
+        ? [
+            `Preview: ${data.totalRows} rows`,
+            `would import ${data.wouldImport ?? 0}`,
+            `invalid ${data.invalidRows}`,
+            `dup(file) ${data.duplicateInFile}`,
+            `dup(sheet) ${data.duplicateInSheet}`,
+          ]
+        : [
+            `Imported ${data.imported ?? 0}`,
+            `${data.totalRows} rows`,
+            `invalid ${data.invalidRows}`,
+            `dup(file) ${data.duplicateInFile}`,
+            `dup(sheet) ${data.duplicateInSheet}`,
+            ...(data.appendFailed ? [`append_failed ${data.appendFailed}`] : []),
+          ];
+      showMsg(
+        data.invalidRows || data.duplicateInFile || data.duplicateInSheet ? 'err' : 'ok',
+        summaryPieces.join('; '),
+      );
+      if (dryRun) setImportPreview(data);
+      else {
+        setImportPreview(null);
+        await refreshContacts();
+      }
+    } catch (e) {
+      showMsg('err', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runJsonImport = async (dryRun: boolean) => {
     let rows: unknown[];
     try {
       rows = JSON.parse(importJson) as unknown[];
       if (!Array.isArray(rows)) throw new Error('JSON must be an array');
+      assertImportJsonWithinClientLimits(rows);
     } catch (e) {
       showMsg('err', e instanceof Error ? e.message : 'Invalid JSON');
       return;
     }
+    const bodyBytes = utf8ByteLength(importJson);
+    if (bodyBytes > IMPORT_MAX_UTF8_BYTES) {
+      showMsg('err', `JSON is ${bodyBytes} UTF-8 bytes; max is ${IMPORT_MAX_UTF8_BYTES} (5 MiB).`);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await adminFetch<{ imported: number; failed: number; errors: string[] }>(
-        '/contacts/import',
-        { method: 'POST', json: { rows } },
-      );
+      const data = await adminFetch<ContactImportResponse>('/contacts/import', {
+        method: 'POST',
+        json: { rows, dryRun },
+      });
+      const summaryPieces = dryRun
+        ? [
+            `Preview: ${data.totalRows} rows`,
+            `would import ${data.wouldImport ?? 0}`,
+            `invalid ${data.invalidRows}`,
+            `dup(file) ${data.duplicateInFile}`,
+            `dup(sheet) ${data.duplicateInSheet}`,
+          ]
+        : [
+            `Imported ${data.imported ?? 0}`,
+            `${data.totalRows} rows`,
+            `invalid ${data.invalidRows}`,
+            ...(data.appendFailed ? [`append_failed ${data.appendFailed}`] : []),
+          ];
       showMsg(
-        data.failed ? 'err' : 'ok',
-        `Imported ${data.imported}, failed ${data.failed}. ${data.errors.slice(0, 5).join('; ')}`,
+        data.invalidRows || data.duplicateInFile || data.duplicateInSheet ? 'err' : 'ok',
+        summaryPieces.join('; '),
       );
-      await refreshContacts();
+      if (dryRun) setImportPreview(data);
+      else {
+        setImportPreview(null);
+        await refreshContacts();
+      }
     } catch (e) {
       showMsg('err', e instanceof Error ? e.message : String(e));
     } finally {
@@ -729,22 +875,105 @@ export function App(): JSX.Element {
           </div>
 
           <div className="panel">
-            <h2>Import JSON</h2>
+            <h2>Import spreadsheet (CSV / TSV)</h2>
             <p style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
-              POST body shape: <code>{'{"rows": [ { "email", "firstName", ... } ] }'}</code> — array of contact objects
-              (same fields as create).
+              Columns map by <strong>header name</strong> (aliases supported). Paste from Excel / export CSV, or choose a
+              file (max ~5&nbsp;MiB UTF-8, max 10&nbsp;000 data rows). Fully empty lines are ignored. Preview runs a
+              dry-run; Import appends valid rows in file order (invalid and duplicate rows are skipped).
+            </p>
+            <div className="form-grid" style={{ marginBottom: '0.75rem' }}>
+              <label>
+                Delimiter
+                <select
+                  value={importDelimiter}
+                  onChange={(e) => setImportDelimiter(e.target.value as 'auto' | 'tab' | 'comma')}
+                >
+                  <option value="auto">Auto (tab if first line contains tab, else comma)</option>
+                  <option value="tab">Tab</option>
+                  <option value="comma">Comma</option>
+                </select>
+              </label>
+              <label style={{ alignSelf: 'end' }}>
+                <span style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
+                  UTF-8 bytes: {utf8ByteLength(importSpreadsheetText)} / {IMPORT_MAX_UTF8_BYTES} — est. data rows:{' '}
+                  {estimatedDataRowsFromCsvText(importSpreadsheetText)}
+                </span>
+              </label>
+            </div>
+            <label>
+              Paste CSV or TSV
+              <textarea
+                style={{ width: '100%', minHeight: 160, fontFamily: 'monospace', fontSize: '0.8rem' }}
+                value={importSpreadsheetText}
+                onChange={(e) => {
+                  setImportSpreadsheetText(e.target.value);
+                  setImportPreview(null);
+                }}
+              />
+            </label>
+            <div className="row-actions" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <input
+                type="file"
+                accept=".csv,.tsv,text/csv,text/tab-separated-values,text/plain"
+                disabled={loading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) loadSpreadsheetFile(f);
+                }}
+              />
+              <button
+                type="button"
+                className="secondary"
+                disabled={loading}
+                onClick={() => void runSpreadsheetImport(true)}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={loading}
+                onClick={() => void runSpreadsheetImport(false)}
+              >
+                Import
+              </button>
+            </div>
+            {importPreview ? (
+              <div style={{ marginTop: '1rem' }}>
+                <h3 style={{ fontSize: '1rem' }}>Last preview</h3>
+                <pre style={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: 200 }}>
+                  {JSON.stringify(importPreview, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+
+          <details className="panel">
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+              Advanced: import JSON rows (legacy array body)
+            </summary>
+            <p style={{ fontSize: '0.85rem', color: '#9aa0a6' }}>
+              POST <code>{'{"rows":[{ "email", "firstName", ...}], "dryRun"?: true }'}</code> — same limits and response
+              shape as spreadsheet import.
             </p>
             <textarea
               style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.8rem' }}
               value={importJson}
-              onChange={(e) => setImportJson(e.target.value)}
+              onChange={(e) => {
+                setImportJson(e.target.value);
+                setImportPreview(null);
+              }}
             />
             <div className="row-actions">
-              <button type="button" className="primary" disabled={loading} onClick={() => void runImport()}>
-                Import rows
+              <button type="button" className="secondary" disabled={loading} onClick={() => void runJsonImport(true)}>
+                Preview JSON
+              </button>
+              <button type="button" className="primary" disabled={loading} onClick={() => void runJsonImport(false)}>
+                Import JSON
               </button>
             </div>
-          </div>
+          </details>
         </>
       ) : null}
 

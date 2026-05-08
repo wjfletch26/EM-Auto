@@ -491,24 +491,14 @@ export async function updateContactProfile(
 }
 
 /**
- * Appends a new contact row. Fails if the email already exists (case-insensitive).
+ * Builds Contacts tab row values (`Contacts!A:Y`) before append — shared by
+ * `appendContact` and admin bulk import after duplicate checks upstream.
  */
-export async function appendContact(payload: ContactAppendPayload): Promise<void> {
+export function buildContactsAppendValuesRow(payload: ContactAppendPayload): (string | number)[] {
   const email = payload.email.trim().toLowerCase();
-  if (!email || !email.includes('@')) {
-    throw new Error('appendContact: valid email is required');
-  }
-  const firstName = payload.firstName?.trim();
-  if (!firstName) {
-    throw new Error('appendContact: firstName is required');
-  }
+  const firstName = payload.firstName?.trim() ?? '';
 
-  const existing = await getContacts();
-  if (existing.some((c) => c.email === email)) {
-    throw new Error(`appendContact: duplicate email ${email}`);
-  }
-
-  const row: (string | number)[] = [
+  return [
     email,
     firstName,
     payload.lastName?.trim() ?? '',
@@ -535,7 +525,14 @@ export async function appendContact(payload: ContactAppendPayload): Promise<void
     payload.pipelineStatus?.trim() || 'new',
     '', // last_profile_version_used_for_generation (column Y)
   ];
+}
 
+/**
+ * Writes one contact row. Caller MUST ensure email is absent from the spreadsheet
+ * (`getContacts` / upstream import classification).
+ */
+export async function appendContactRowWithoutDuplicateCheck(payload: ContactAppendPayload): Promise<void> {
+  const row = buildContactsAppendValuesRow(payload);
   const sheets = await getClient();
   await withRetry(() =>
     sheets.spreadsheets.values.append({
@@ -547,7 +544,28 @@ export async function appendContact(payload: ContactAppendPayload): Promise<void
     })
   );
 
-  logger.info({ module: 'sheets', email }, 'Contact row appended');
+  logger.info({ module: 'sheets', email: row[0] }, 'Contact row appended');
+}
+
+/**
+ * Appends a new contact row. Fails if the email already exists (case-insensitive).
+ */
+export async function appendContact(payload: ContactAppendPayload): Promise<void> {
+  const email = payload.email.trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    throw new Error('appendContact: valid email is required');
+  }
+  const firstName = payload.firstName?.trim();
+  if (!firstName) {
+    throw new Error('appendContact: firstName is required');
+  }
+
+  const existing = await getContacts();
+  if (existing.some((c) => c.email === email)) {
+    throw new Error(`appendContact: duplicate email ${email}`);
+  }
+
+  await appendContactRowWithoutDuplicateCheck(payload);
 }
 
 /**

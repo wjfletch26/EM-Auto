@@ -33,7 +33,7 @@ Responses:
 ## Request Format
 
 - All request bodies must be `Content-Type: application/json`.
-- JSON body limit: **10 MB** (covers bulk contact imports).
+- JSON body limit: **10 MB** (generic admin payloads). **`POST /contacts/import`** additionally enforces **5 MB** on `spreadsheetText` / serialized `rows` JSON and **10 000** data rows — see that route below.
 - URL-encoded email parameters (`:email` segments) are decoded with `decodeURIComponent` and lowercased.
 
 ---
@@ -85,19 +85,49 @@ Appends a single new contact row to the `Contacts` tab.
 
 ### `POST /api/admin/contacts/import`
 
-Bulk-appends contacts. Processes rows sequentially; partial failures are reported but do not stop the import.
+Imports many contacts via **either** pasted CSV / TSV text **or** a legacy JSON `rows` array. Invalid rows and duplicates are **skipped**; valid rows are appended **in file order**. The server loads existing emails once (`getContacts`), then runs one Sheets `append` per queued row.
 
-**Request body:**
+**Exactly one source** — request **400** if both are present or neither (`IMPORT_SOURCE_CONFLICT` / `MISSING_IMPORT_SOURCE`):
+
+| Shape | Purpose |
+|---|---|
+| `{ "spreadsheetText": string, "delimiter"?: "auto" \| "tab" \| "comma", "dryRun"?: boolean }` | CSV / TSV from export or clipboard |
+| `{ "rows": [ { "email": "...", "firstName": "...", ... } ], "dryRun"?: boolean }` | CamelCase objects (same optional fields as `POST /contacts`) |
+
+**Limits** (stricter than the global Admin JSON body **10 MB** ceiling):
+
+| Guard | Max | On exceed (**400**) |
+|---|---|---|
+| `spreadsheetText` UTF-8 byte length, or serialized `JSON.stringify(rows)` length | **5 MB** | `code`: `PAYLOAD_TOO_LARGE` |
+| Parsed data rows (`skipEmptyLines: 'greedy'` — fully empty lines are **not** counted in `totalRows`) or `rows.length` | **10 000** | `code`: `ROW_LIMIT_EXCEEDED` |
+
+Other **400** examples: `EMPTY_SPREADSHEET_TEXT`, `BAD_DELIMITER`, CSV parse errors.
+
+**`dryRun: true`:** classification only — **no** Sheets writes. Response includes **`wouldImport`**; **`imported` is omitted**.
+
+**Duplicate policy:** The **first valid** row wins per normalized email. Invalid rows **do not** reserve the email. After the first valid occurrence for an email — whether appended or skipped as **`duplicate_in_sheet`** — further **valid** rows with that email become **`duplicate_in_file`**.
+
+**Response 200 shape** (`errors` capped at ~100 items):
+
+Dry-run:
+
 ```json
-{ "rows": [ { "email": "...", "firstName": "...", ... }, ... ] }
+{
+  "totalRows": 500,
+  "wouldImport": 472,
+  "duplicateInFile": 12,
+  "duplicateInSheet": 9,
+  "invalidRows": 7,
+  "preview": [ { "row": 3, "mapped": { "email": "a@b.com", "firstName": "Ann" } } ],
+  "errors": [ { "row": 14, "code": "INVALID_EMAIL", "message": "email must contain @" } ]
+}
 ```
 
-Each row accepts the same fields as the single-contact create. If `rows` is not an array, returns **400**.
+Commit adds **`imported`** and **`appendFailed`** (Sheets failures after classification), and may append `SHEETS_APPEND_FAILED` to `errors` while earlier rows remain committed (**partial success**).
 
-**Response 200:**
-```json
-{ "imported": 5, "failed": 1, "errors": ["Row 3: ..."] }
-```
+Without append failures: `imported + duplicateInFile + duplicateInSheet + invalidRows === totalRows`.
+
+CSV / TSV columns map **by header name** only — aliases supported (e.g. `Work Email` → email, `First Name` → firstName); unmapped columns are ignored and never written.
 
 ---
 
